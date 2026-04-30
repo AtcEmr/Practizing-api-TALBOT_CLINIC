@@ -27,11 +27,11 @@ namespace PractiZing.BusinessLogic.PatientService.Services
 
             var practice = await this._practiceRepository.Get();
 
-            string accessKey = practice.QuickSiteAccessKey;//"AKIARYDURZ3XFKZV4REW";
-            string secretKey = practice.QuickSiteSecretKey;  //$"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";
-            string AwsAccountId = practice.QuickSiteAWSAccointId; //"120503521006";
+            string accessKey = practice.QuickSiteAccessKey;
+            string secretKey = practice.QuickSiteSecretKey;
+            string AwsAccountId = practice.QuickSiteAWSAccointId;
 
-            string rolename = practice.QuickSiteRoleName; //"Billing-admin-role";
+            string rolename = practice.QuickSiteRoleName;
 
 
             RegionEndpoint regionEndpoint=null;
@@ -72,24 +72,12 @@ namespace PractiZing.BusinessLogic.PatientService.Services
                     SecretAccessKey,
                     sessionToken,
                     regionEndpoint);
-
-
-               // Registering Quicksight User for first time, use only once(Remove comment for first time only while calling GetUrl method)
-                //var result = await client.RegisterUserAsync(new RegisterUserRequest
-                //{
-                //    AwsAccountId = AwsAccountId,
-                //    Email = "clinic@autumntreatment.com",
-                //    IamArn = $"arn:aws:iam::{AwsAccountId}:role/TalbotLAB-Billing-Role",
-                //    SessionName = "nikunj",
-                //    IdentityType = IdentityType.IAM,
-                //    Namespace = "default",
-                //    UserRole = UserRole.ADMIN,
-                //});
+              
 
                 var urlReponse = await client.GetDashboardEmbedUrlAsync(new GetDashboardEmbedUrlRequest
                 {
                     AwsAccountId = AwsAccountId,
-                    DashboardId = practice.QuickSiteDashboardId, //"b6a390d8-dbc6-41f1-9a25-0f7763124eac",
+                    DashboardId = practice.QuickSiteDashboardId,
                     IdentityType = IdentityType.IAM,
                     ResetDisabled = true,
                     SessionLifetimeInMinutes = Convert.ToInt64( practice.QuickSiteSessionLifetimeInMinutes), //600
