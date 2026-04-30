@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Repo-wide MSBuild props applied to every csproj.
+
+    Pin transitive NuGet packages whose 6.0.0+ releases dropped support for
+    netcoreapp2.1. Without this, dotnet restore picks v6 (because some other
+    package's floor allows it), then dotnet publish hits the targets-file
+    guard inside that package and fails with:
+
+      error : <Package> doesn't support netcoreapp2.1.
+      Consider updating your TargetFramework to netcoreapp3.1 or later.
+
+    These older versions all ship .NET Standard 1.x / netcoreapp2.0
+    targets, which are compatible with our netcoreapp2.1 + netstandard2.0
+    projects.
+
+    Remove this file once the codebase is upgraded off netcoreapp2.1.
+  -->
+  <ItemGroup>
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
+  </ItemGroup>
+</Project>
