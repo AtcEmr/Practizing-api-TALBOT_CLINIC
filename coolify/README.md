@@ -57,7 +57,7 @@ treats the whole stack as one Application resource.
    - `patient`       → `patient.api.your-domain.example`
    - `report`        → `report.api.your-domain.example`
    - `security`      → `security.api.your-domain.example`
-   Each service's container port is `8081`; Coolify's Traefik instance
+   Each service's container port is `8080`; Coolify's Traefik instance
    terminates TLS in front of it.
 6. **Persistent storage**: the compose file declares an `attachments`
    volume mounted at `/attachments` in every container. Coolify will
@@ -81,10 +81,10 @@ The HostService aggregates routes from every other Api project, so for a
 quick smoke test:
 
 ```bash
-curl -i http://localhost:8081/   # if you've mapped host:8081
+curl -i http://localhost:8081/   # host 8081 -> container 8080 (per override below)
 ```
 
-(Each compose service uses `expose: 8081` — not `ports:` — so locally
+(Each compose service uses `expose: 8080` — not `ports:` — so locally
 you'll need to add a `ports:` mapping in a `docker-compose.override.yaml`
 or let Coolify handle the proxying.)
 
@@ -116,14 +116,20 @@ drop a `docker-compose.override.yaml` next to the main compose file
 (it's `.gitignored`):
 
 ```yaml
+# host_port:container_port — containers always listen on 8080,
+# host side uses 8081+ to avoid clashing with anything on the
+# conventional 8080.
 services:
   host:
     ports:
-      - "5001:8081"     # http://localhost:5001/
+      - "8081:8080"     # http://localhost:8081/
   chargepayment:
     ports:
-      - "5002:8081"
-  # ... etc
+      - "8082:8080"
+  denial:
+    ports:
+      - "8083:8080"
+  # ... continue 8084, 8085, ... per service
 ```
 
 `docker compose up -d` picks the override up automatically.
@@ -137,7 +143,7 @@ Two patterns work:
    `https://api.your-domain.example`. The browser → Coolify Traefik
    → `host` container.
 2. **Internal DNS**: set the UI's `API_URL` to
-   `http://practizing-host:8081`. Both stacks must be on the `coolify`
+   `http://practizing-host:8080`. Both stacks must be on the `coolify`
    network (they are, with this config). Faster, no public hop, and the
    API never needs a public hostname. CORS becomes a non-issue.
 
@@ -156,7 +162,7 @@ Two patterns work:
   `app.UseSwaggerUI(...)` in their `Startup.cs` — patch them to read the
   same flag before going to a public domain.
 - **TLS**: the apps listen on plain HTTP inside the container. Coolify's
-  reverse proxy terminates TLS. Do not expose container port `8081`
+  reverse proxy terminates TLS. Do not expose container port `8080`
   directly to the internet.
 - **Logs**: services use `loggerFactory.AddConsole` only. Coolify
   captures stdout/stderr by default; for retention longer than the

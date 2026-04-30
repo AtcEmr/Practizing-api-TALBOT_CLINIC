@@ -2,7 +2,7 @@
 #
 # Each service builds the same parameterized Dockerfile with a different
 # SERVICE_PROJECT / SERVICE_DLL build-arg. All services listen on container
-# port 8081 and are exposed to the Coolify proxy via subdomains (configure
+# port 8080 and are exposed to the Coolify proxy via subdomains (configure
 # the public hostname per service in the Coolify UI).
 #
 # Database is NOT defined here. Provide a managed SQL Server (Coolify
@@ -20,7 +20,7 @@ x-api-common: &api-common
   restart: unless-stopped
   environment:
     ASPNETCORE_ENVIRONMENT: Production
-    ASPNETCORE_URLS: http://+:8081
+    ASPNETCORE_URLS: http://+:8080
     SiteLocale: ${SITE_LOCALE:-en-GB}
     ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
     ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
@@ -33,16 +33,16 @@ x-api-common: &api-common
     AWS__Region: ${AWS_REGION:-us-east-1}
   volumes:
     - attachments:/attachments
-  # Internal port. Coolify's Traefik (on the shared `coolify` network)
-  # routes incoming traffic to this port; no host port is bound. To bind
-  # a host port for local debugging, override in docker-compose.override.yaml
-  # (gitignored), e.g.:
+  # Container listens on 8080. Coolify's Traefik (on the shared
+  # `coolify` network) routes incoming traffic to this port; no host
+  # port is bound by default. To bind a host port for local debugging,
+  # override in docker-compose.override.yaml (gitignored), e.g.:
   #   services:
   #     host:
   #       ports:
-  #         - "8081:8081"
+  #         - "8081:8080"   # host 8081 -> container 8080
   expose:
-    - "8081"
+    - "8080"
   networks:
     - coolify       # shared with Coolify's Traefik proxy and other stacks
     - practizing    # private, for inter-service traffic in this stack
@@ -63,7 +63,7 @@ services:
     container_name: practizing-host
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8081
+      ASPNETCORE_URLS: http://+:8080
       SiteLocale: ${SITE_LOCALE:-en-GB}
       ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
       ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
