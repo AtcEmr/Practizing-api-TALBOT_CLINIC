@@ -88,6 +88,59 @@ curl -i http://localhost:8080/   # if you've mapped host:8080
 you'll need to add a `ports:` mapping in a `docker-compose.override.yaml`
 or let Coolify handle the proxying.)
 
+## Networking
+
+The compose stack joins two networks:
+
+- **`coolify`** — declared `external: true`. Coolify creates this network
+  on its host and runs Traefik on it. Every service that Coolify should
+  publicly route must be on it. The UI stack also joins this network so
+  its nginx layer can reach API services by container name without going
+  through the public internet.
+- **`practizing`** — a private bridge created by this stack. Used for
+  inter-service traffic (e.g. if Service A ever needs to call Service B
+  internally).
+
+If you're running compose outside Coolify (e.g. on a developer machine),
+the `coolify` network won't exist yet. Create it once:
+
+```bash
+docker network create coolify
+```
+
+### Local host-port binding (debugging)
+
+The compose file uses `expose:` only, so no host ports are bound by
+default. To poke a service from your host without going through Traefik,
+drop a `docker-compose.override.yaml` next to the main compose file
+(it's `.gitignored`):
+
+```yaml
+services:
+  host:
+    ports:
+      - "5001:8080"     # http://localhost:5001/
+  chargepayment:
+    ports:
+      - "5002:8080"
+  # ... etc
+```
+
+`docker compose up -d` picks the override up automatically.
+
+### How the UI reaches the API
+
+Two patterns work:
+
+1. **Public URL** (default in Coolify): the UI's `API_URL` is the
+   public host of the API stack's `host` service, e.g.
+   `https://api.your-domain.example`. The browser → Coolify Traefik
+   → `host` container.
+2. **Internal DNS**: set the UI's `API_URL` to
+   `http://practizing-host:8080`. Both stacks must be on the `coolify`
+   network (they are, with this config). Faster, no public hop, and the
+   API never needs a public hostname. CORS becomes a non-issue.
+
 ## Operational notes
 
 - **Health checks**: none of the services expose a `/health` endpoint

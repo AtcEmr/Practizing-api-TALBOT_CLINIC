@@ -33,10 +33,19 @@ x-api-common: &api-common
     AWS__Region: ${AWS_REGION:-us-east-1}
   volumes:
     - attachments:/attachments
+  # Internal port. Coolify's Traefik (on the shared `coolify` network)
+  # routes incoming traffic to this port; no host port is bound. To bind
+  # a host port for local debugging, override in docker-compose.override.yaml
+  # (gitignored), e.g.:
+  #   services:
+  #     host:
+  #       ports:
+  #         - "8080:8080"
   expose:
     - "8080"
   networks:
-    - practizing
+    - coolify       # shared with Coolify's Traefik proxy and other stacks
+    - practizing    # private, for inter-service traffic in this stack
   # Coolify wires Traefik labels via its own UI; uncomment if you want to
   # pin labels in the compose file directly.
   # labels:
@@ -143,5 +152,13 @@ volumes:
     # CAQH files. Coolify will create a managed volume; back it up.
 
 networks:
+  coolify:
+    # Shared with Coolify's Traefik and any other stacks that join this
+    # network. Coolify creates this network for you when the instance is
+    # set up; if you're running compose outside Coolify, create it once:
+    #   docker network create coolify
+    external: true
   practizing:
+    # Private bridge for inter-service traffic within this stack. Keeps
+    # internal calls off the shared coolify network.
     driver: bridge

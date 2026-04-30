@@ -1,0 +1,11 @@
+# Force LF on files that run inside Linux containers, regardless of the
+# host's autocrlf setting. CRLF in a shell script breaks the shebang;
+# CRLF in a Dockerfile breaks RUN heredocs.
+
+*.sh                 text eol=lf
+Dockerfile           text eol=lf
+*.dockerfile         text eol=lf
+docker-compose*.yaml text eol=lf
+docker-compose*.yml  text eol=lf
+.dockerignore        text eol=lf
+.env.example         text eol=lf
