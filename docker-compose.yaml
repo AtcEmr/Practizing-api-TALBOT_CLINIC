@@ -1,0 +1,147 @@
+# PractiZing API stack — single Coolify resource (Docker Compose).
+#
+# Each service builds the same parameterized Dockerfile with a different
+# SERVICE_PROJECT / SERVICE_DLL build-arg. All services listen on container
+# port 8080 and are exposed to the Coolify proxy via subdomains (configure
+# the public hostname per service in the Coolify UI).
+#
+# Database is NOT defined here. Provide a managed SQL Server (Coolify
+# resource, RDS, or external) and inject ConnectionStrings__* via Coolify
+# environment variables. See coolify/README.md.
+#
+# Required env vars (set in Coolify, see .env.example for the full list):
+#   ConnectionStrings__DefaultConnection
+#   ConnectionStrings__PracticeCentralDBContext
+#   JWT_SECRET
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION    (DynamoDB history)
+#   UI_URL                                                   (allow-listed origin)
+
+x-api-common: &api-common
+  restart: unless-stopped
+  environment:
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_URLS: http://+:8080
+    SiteLocale: ${SITE_LOCALE:-en-GB}
+    ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
+    ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
+    UIUrl: ${UI_URL}
+    AttachmentFolder: /attachments
+    ConnectionStrings__DefaultConnection: ${DB_DEFAULT_CONNECTION}
+    ConnectionStrings__PracticeCentralDBContext: ${DB_PRACTICE_CENTRAL_CONNECTION}
+    AWS__AccessKeyId: ${AWS_ACCESS_KEY_ID:-}
+    AWS__SecretAccessKey: ${AWS_SECRET_ACCESS_KEY:-}
+    AWS__Region: ${AWS_REGION:-us-east-1}
+  volumes:
+    - attachments:/attachments
+  expose:
+    - "8080"
+  networks:
+    - practizing
+  # Coolify wires Traefik labels via its own UI; uncomment if you want to
+  # pin labels in the compose file directly.
+  # labels:
+  #   - "traefik.enable=true"
+
+services:
+  host:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: HostService/HostService.Api/HostService.Api.csproj
+        SERVICE_DLL: HostService.Api.dll
+    container_name: practizing-host
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      SiteLocale: ${SITE_LOCALE:-en-GB}
+      ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
+      ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
+      UIUrl: ${UI_URL}
+      AttachmentFolder: /attachments
+      ConnectionStrings__DefaultConnection: ${DB_DEFAULT_CONNECTION}
+      ConnectionStrings__PracticeCentralDBContext: ${DB_PRACTICE_CENTRAL_CONNECTION}
+      AWS__AccessKeyId: ${AWS_ACCESS_KEY_ID:-}
+      AWS__SecretAccessKey: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS__Region: ${AWS_REGION:-us-east-1}
+      UseSwagger: ${USE_SWAGGER:-false}
+
+  chargepayment:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: ChargePaymentService/PractiZing.Api.ChargePaymentService/PractiZing.Api.ChargePaymentService.csproj
+        SERVICE_DLL: PractiZing.Api.ChargePaymentService.dll
+    container_name: practizing-chargepayment
+
+  denial:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: DenialManagementService/PractiZing.Api.DenialService/PractiZing.Api.DenialService.csproj
+        SERVICE_DLL: PractiZing.Api.DenialService.dll
+    container_name: practizing-denial
+
+  era:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: ERAService/PractiZing.Api.ERAService/PractiZing.Api.ERAService.csproj
+        SERVICE_DLL: PractiZing.Api.ERAService.dll
+    container_name: practizing-era
+
+  master:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: MasterService/PractiZing.Api.MasterService/PractiZing.Api.MasterService.csproj
+        SERVICE_DLL: PractiZing.Api.MasterService.dll
+    container_name: practizing-master
+
+  patient:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: PatientService/PractiZing.Api.PatientService/PractiZing.Api.PatientService.csproj
+        SERVICE_DLL: PractiZing.Api.PatientService.dll
+    container_name: practizing-patient
+
+  report:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: ReportService/PractiZing.Api.ReportService/PractiZing.Api.ReportService.csproj
+        SERVICE_DLL: PractiZing.Api.ReportService.dll
+    container_name: practizing-report
+
+  security:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PROJECT: SecurityService/PractiZing.Api.SecurityService/PractiZing.Api.SecurityService.csproj
+        SERVICE_DLL: PractiZing.Api.SecurityService.dll
+    container_name: practizing-security
+
+volumes:
+  attachments:
+    # Shared upload directory for services that write patient lab reports /
+    # CAQH files. Coolify will create a managed volume; back it up.
+
+networks:
+  practizing:
+    driver: bridge

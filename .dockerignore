@@ -1,0 +1,57 @@
+# Keep the build context small and reproducible.
+
+# VCS / IDE
+.git
+.gitignore
+.github
+.vs
+.vscode
+.idea
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build artifacts
+**/bin
+**/obj
+**/[Dd]ebug
+**/[Dd]ebugPublic
+**/[Rr]elease
+**/[Rr]eleases
+**/x64
+**/x86
+**/build
+**/bld
+**/Logs
+**/log
+
+# Backups / scratch files
+**/*.bak
+**/*.bak.*
+**/*.swp
+**/*~
+**/.DS_Store
+**/Thumbs.db
+
+# Local secrets and dev configs (compose injects via env vars)
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/secrets.json
+.env
+.env.*
+!.env.example
+
+# Docs / non-build files we don't need in the image
+README.md
+docs/
+coolify/
+*.md
+
+# Test projects don't need to ship in the runtime image; they're not
+# referenced by the Api csprojs anyway, but trimming saves time.
+**/*UnitTest*/bin
+**/*UnitTest*/obj
+
+# Sql provisioning scripts — these belong in a migration runner, not in the API image
+*.sql

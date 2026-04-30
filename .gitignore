@@ -3,6 +3,21 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Secrets and local environment — never commit
+.env
+.env.*
+!.env.example
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/secrets.json
+*.pem
+*.pfx
+*.key
+
+# Docker / Coolify local state
+docker-compose.override.yaml
+docker-compose.override.yml
+
 # User-specific files
 *.suo
 *.user
