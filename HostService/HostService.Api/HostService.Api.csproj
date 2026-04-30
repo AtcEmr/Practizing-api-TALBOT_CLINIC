@@ -29,11 +29,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Original HintPath pointed at EDIFabric/Packages/, which is gitignored
+         (root .gitignore: **/packages/*) and absent from clean clones / CI
+         builds. Redirect to the same DLLs already committed under lib/, the
+         path used by ChargePaymentService and EdiFabric.Templates.Hipaa. -->
     <Reference Include="EdiFabric.Core">
-      <HintPath>..\..\EDIFabric\Packages\EdiFabric.Core.dll</HintPath>
+      <HintPath>..\..\lib\EdiFabric.Framework\DLLs\net45\EdiFabric.Core.dll</HintPath>
     </Reference>
     <Reference Include="EdiFabric.Framework">
-      <HintPath>..\..\EDIFabric\Packages\EdiFabric.Framework.dll</HintPath>
+      <HintPath>..\..\lib\EdiFabric.Framework\DLLs\net45\EdiFabric.Framework.dll</HintPath>
     </Reference>
   </ItemGroup>
 

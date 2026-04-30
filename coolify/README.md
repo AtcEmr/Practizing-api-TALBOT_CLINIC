@@ -4,6 +4,22 @@ This repository ships a single `docker-compose.yaml` at the root that builds
 all eight ASP.NET Core services from one parameterized `Dockerfile`. Coolify
 treats the whole stack as one Application resource.
 
+## Build-blocker fix that's already applied
+
+Two `.csproj` files referenced DLLs at `EDIFabric/Packages/`, which is
+gitignored (root `.gitignore: **/packages/*`) and absent from clean
+clones. The same DLLs already exist at `lib/EdiFabric.Framework/DLLs/net45/`,
+which is the path the working `ChargePaymentService.BusinessLogic.csproj`
+already used. The HintPaths in the following two files were redirected
+on the `coolify` branch so Docker builds succeed for everyone:
+
+- `HostService/HostService.Api/HostService.Api.csproj`
+- `ClaimService/PractiZing.ClaimCreator.Prof/PractiZing.ClaimCreator.Prof.csproj`
+
+Without this fix, builds for `host`, `chargepayment`, `era`, and
+`patient` would fail with `error MSB3245: Could not resolve
+"EdiFabric.Core" / "EdiFabric.Framework"`.
+
 ## Pre-deploy checklist (do these BEFORE the first push)
 
 1. **Rotate compromised credentials.** The repo has historically committed
