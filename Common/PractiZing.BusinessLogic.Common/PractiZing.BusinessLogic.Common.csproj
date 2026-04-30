@@ -6,7 +6,10 @@
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="8.0.0" />
-    <PackageReference Include="MimeKit" Version="4.7.1" />
+    <!-- MimeKit 4.x requires netcoreapp3.1+ via its hard transitive dep on
+         System.Runtime.CompilerServices.Unsafe >= 6.0.0. Pinned to last
+         2.x release that supports netstandard2.0 / netcoreapp2.1. -->
+    <PackageReference Include="MimeKit" Version="2.15.1" />
   </ItemGroup>
 
   <ItemGroup>
