@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="FormTemplates\Cms1500.json" />
+    <None Remove="FormTemplates\Cms1500.pdf" />
+    <None Remove="FormTemplates\Cms1500blank.pdf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="FormTemplates\Cms1500.json" />
+    <EmbeddedResource Include="FormTemplates\Cms1500.pdf" />
+    <EmbeddedResource Include="FormTemplates\Cms1500blank.pdf" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="iTextSharp" Version="5.5.13.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Base\PractiZing.Base\PractiZing.Base.csproj" />
+    <ProjectReference Include="..\PractiZing.ClaimCreator.Base\PractiZing.ClaimCreator.Base.csproj" />
+  </ItemGroup>
+</Project>

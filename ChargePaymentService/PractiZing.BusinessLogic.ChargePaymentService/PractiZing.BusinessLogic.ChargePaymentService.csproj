@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Connected Services\TrizettoReference\**" />
+    <EmbeddedResource Remove="Connected Services\TrizettoReference\**" />
+    <None Remove="Connected Services\TrizettoReference\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    
+    <PackageReference Include="PdfSharpCore" Version="1.1.21" />
+    
+    <PackageReference Include="RestSharp" Version="106.10.1" />
+    
+    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Base\PractiZing.Base\PractiZing.Base.csproj" />
+    <ProjectReference Include="..\..\ClaimService\PractiZing.ClaimCreator.Base\PractiZing.ClaimCreator.Base.csproj" />
+    <ProjectReference Include="..\..\ClaimService\PractiZing.ClaimCreator.Form\PractiZing.ClaimCreator.Form.csproj" />
+    <ProjectReference Include="..\..\ClaimService\PractiZing.ClaimCreator.Prof\PractiZing.ClaimCreator.Prof.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.DataAccess.Common\PractiZing.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.Sftp\PractiZing.Sftp.csproj" />
+    <ProjectReference Include="..\..\ERAService\PractiZing.DataAccess.ERAService\PractiZing.DataAccess.ERAService.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.BusinessLogic.MasterService\PractiZing.BusinessLogic.MasterService.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.DataAccess.MasterService\PractiZing.DataAccess.MasterService.csproj" />
+    <ProjectReference Include="..\..\PatientService\PractiZing.DataAccess.PatientService\PractiZing.DataAccess.PatientService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.ChargePaymentService\PractiZing.DataAccess.ChargePaymentService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Connected Services\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="EdiFabric.Core">
+      <HintPath>..\..\lib\EdiFabric.Framework\DLLs\net45\EdiFabric.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

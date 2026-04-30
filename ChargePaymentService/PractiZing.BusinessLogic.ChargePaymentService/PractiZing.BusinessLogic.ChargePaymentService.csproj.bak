@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    
+    <PackageReference Include="PdfSharpCore" Version="1.1.21" />
+    
+    <PackageReference Include="RestSharp" Version="106.10.1" />
+    
+    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Base\PractiZing.Base\PractiZing.Base.csproj" />
+    <ProjectReference Include="..\..\ClaimCreator\PractiZing.ClaimCreator.Prof\PractiZing.ClaimCreator.Prof.csproj" />
+    <ProjectReference Include="..\..\ClaimService\PractiZing.Claim.Cms1500\PractiZing.ClaimService.Cms1500.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.DataAccess.Common\PractiZing.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.Sftp\PractiZing.Sftp.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.BusinessLogic.MasterService\PractiZing.BusinessLogic.MasterService.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.DataAccess.MasterService\PractiZing.DataAccess.MasterService.csproj" />
+    <ProjectReference Include="..\..\PatientService\PractiZing.DataAccess.PatientService\PractiZing.DataAccess.PatientService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.ChargePaymentService\PractiZing.DataAccess.ChargePaymentService.csproj" />
+  </ItemGroup>
+
+</Project>

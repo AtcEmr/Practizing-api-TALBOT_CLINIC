@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Maping\**" />
+    <EmbeddedResource Remove="Maping\**" />
+    <None Remove="Maping\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.QuickSight" Version="3.5.0.2" />
+    <PackageReference Include="AWSSDK.SecurityToken" Version="3.5.0.2" />    
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ChargePaymentService\PractiZing.BusinessLogic.ChargePaymentService\PractiZing.BusinessLogic.ChargePaymentService.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.DataAccess.MasterService\PractiZing.DataAccess.MasterService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.PatientService\PractiZing.DataAccess.PatientService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="X12EDI">
+      <HintPath>..\..\lib\X12EDI.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

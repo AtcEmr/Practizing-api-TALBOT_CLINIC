@@ -1,0 +1,554 @@
+{
+  "ClaimFields": [
+    {
+      "name": "ClaimType",
+      "type": "CheckBox",
+      "formFields": {
+        "medicare": "topmostSubform[0].Page1[0].insurance_type[0]",
+        "medicaid": "topmostSubform[0].Page1[0].insurance_type[1]",
+        "tricare": "topmostSubform[0].Page1[0].insurance_type[2]",
+        "champva": "topmostSubform[0].Page1[0].insurance_type[3]",
+        "groupPlan": "topmostSubform[0].Page1[0].insurance_type[4]",
+        "blacklungs": "topmostSubform[0].Page1[0].insurance_type[5]",
+        "other": "topmostSubform[0].Page1[0].insurance_type[6]"
+      }
+    },
+    {
+      "name": "InsuranceName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].insurance_name[0]"
+    },
+    {
+      "name": "InsuranceAddressPrimary",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].insurance_address[0]"
+    },
+    {
+      "name": "InsuranceAddressSecondary",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].insurance_address2[0]"
+    },
+    {
+      "name": "InsuranceCityStateZip",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].insurance_city_state_zip[0]"
+    },
+    {
+      "name": "PatientFullName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_name[0]"
+    },
+    {
+      "name": "PatientDobMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].birth_mm[0]"
+    },
+    {
+      "name": "PatientDobDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].birth_dd[0]"
+    },
+    {
+      "name": "PatientDobYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].birth_yy[0]"
+    },
+    {
+      "name": "PatientGender",
+      "type": "CheckBox",
+      "formFields": {
+        "Male": "topmostSubform[0].Page1[0].sex[0]", //male
+        "Female": "topmostSubform[0].Page1[0].sex[1]" //female
+      },
+      "formFieldsValues": {
+        "Male": "MALE", //male
+        "Female": "FEMALE" //female
+      }
+    },
+    {
+      "name": "PatientCity",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_city[0]"
+    },
+    {
+      "name": "PatientZip",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_zip[0]"
+    },
+    {
+      "name": "PatientAreaCode",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_AreaCode[0]"
+    },
+    {
+      "name": "PatientPhone",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_phone[0]"
+    },
+    {
+      "name": "PatientState",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_state[0]"
+    },
+    {
+      "name": "PatientStreet",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_street[0]"
+    },
+    {
+      "name": "PatientRelation",
+      "type": "CheckBox",
+      "formFields": {
+        "Self": "topmostSubform[0].Page1[0].rel_to_ins[0]", //self
+        "Spouse": "topmostSubform[0].Page1[0].rel_to_ins[1]", //Spouse
+        "Child": "topmostSubform[0].Page1[0].rel_to_ins[2]", //child
+        "Other": "topmostSubform[0].Page1[0].rel_to_ins[3]", //other
+        "LifePartner": "topmostSubform[0].Page1[0].rel_to_ins[4]" //lifepartner
+      },
+      "formFieldsValues": {
+        "Self": "S", //self
+        "Spouse": "M", //Spouse
+        "Child": "C", //child
+        "Other": "O", //other
+        "LifePartner": "6" //lifepartner
+      }
+    },
+    {
+      "name": "InsuranceId",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].insurance_id[0]"
+    },
+    {
+      "name": "InsuredName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_name[0]"
+    },
+    {
+      "name": "InsuredStreet",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_street[0]"
+    },
+    {
+      "name": "InsuredCity",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_city[0]"
+    },
+    {
+      "name": "InsuredState",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_state[0]"
+    },
+    {
+      "name": "InsuredZip",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_zip[0]"
+    },
+    {
+      "name": "InsuredAreaCode",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_phone_area[0]"
+    },
+    {
+      "name": "InsuredPhone",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_phone[0]"
+    },
+    {
+      "name": "InsuredPolicy",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_policy[0]"
+    },
+    {
+      "name": "InsuredDobMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_dob_mm[0]"
+    },
+    {
+      "name": "InsuredDobDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_dob_dd[0]"
+    },
+    {
+      "name": "InsuredDobYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_dob_yy[0]"
+    },
+    {
+      "name": "InsuredGender",
+      "type": "CheckBox",
+      "formFields": {
+        "Male": "topmostSubform[0].Page1[0].ins_sex[0]", //male
+        "Female": "topmostSubform[0].Page1[0].ins_sex[1]" //female
+      },
+      "formFieldsValues": {
+        "Male": "MALE", //male
+        "Female": "FEMALE" //female
+      }
+    },
+    {
+      "name": "InsurancePlanName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_plan_name[0]"
+    },
+    {
+      "name": "AnotherBenefitPlanExists",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].ins_benefit_plan[0]",
+        "false": "topmostSubform[0].Page1[0].ins_benefit_plan[1]"
+      }
+    },
+    {
+      "name": "PatientSignature",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_signature[0]"
+    },
+    {
+      "name": "DateOfSign",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_date[0]"
+    },
+    {
+      "name": "InsuredSignature",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ins_signature[0]"
+    },
+    {
+      "name": "OtherInsuredFullName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].other_ins_name[0]"
+    },
+    {
+      "name": "OtherInsuredPolicy",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].other_ins_policy[0]"
+    },
+    {
+      "name": "OtherInsuredPlanName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].other_ins_plan_name[0]"
+    },
+    {
+      "name": "Employment",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].employment[0]",
+        "false": "topmostSubform[0].Page1[0].employment[1]"
+      }
+    },
+    {
+      "name": "AutoAccident",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].pt_auto_accident[0]",
+        "false": "topmostSubform[0].Page1[0].pt_auto_accident[1]"
+      }
+    },
+    {
+      "name": "AutoAccidentPlace",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].accident_place[0]"
+    },
+    {
+      "name": "OtherAccident",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].other_accident[0]",
+        "false": "topmostSubform[0].Page1[0].other_accident[1]"
+      }
+    },
+    {
+      "name": "CurrentIllnesDateMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].cur_ill_mm[0]"
+    },
+    {
+      "name": "CurrentIllnesDateDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].cur_ill_dd[0]"
+    },
+    {
+      "name": "CurrentIllnesDateYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].cur_ill_yy[0]"
+    },
+    {
+      "name": "CurrentIllnesQualifier",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0]._73[0]"
+    },
+    {
+      "name": "OtherIllnesDateMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].sim_ill_mm[0]"
+    },
+    {
+      "name": "OtherIllnesDateDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].sim_ill_dd[0]"
+    },
+    {
+      "name": "OtherIllnesDateYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].sim_ill_yy[0]"
+    },
+    {
+      "name": "OtherIllnesQualifier",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0]._74[0]"
+    },
+    {
+      "name": "UnableToWorkFromMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_mm_from[0]"
+    },
+    {
+      "name": "UnableToWorkFromDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_dd_from[0]"
+    },
+    {
+      "name": "UnableToWorkFromYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_yy_from[0]"
+    },
+    {
+      "name": "UnableToWorkToMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_mm_end[0]"
+    },
+    {
+      "name": "UnableToWorkToDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_dd_end[0]"
+    },
+    {
+      "name": "UnableToWorkToYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].work_yy_end[0]"
+    },
+    {
+      "name": "PhysicianReference",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].ref_physician[0]"
+    },
+    {
+      "name": "PhysicianReferenceQualifier",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0]._85[0]"
+    },
+    {
+      "name": "PhysicianNPI",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].id_physician[0]"
+    },
+    {
+      "name": "HospitalizationFromMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_mm_from[0]"
+    },
+    {
+      "name": "HospitalizationFromDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_dd_from[0]"
+    },
+    {
+      "name": "HospitalizationFromYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_yy_from[0]"
+    },
+    {
+      "name": "HospitalizationToMonth",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_mm_end[0]"
+    },
+    {
+      "name": "HospitalizationToDay",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_dd_end[0]"
+    },
+    {
+      "name": "HospitalizationToYear",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].hosp_yy_end[0]"
+    },
+    {
+      "name": "AdditionalInformation",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0]._96[0]"
+    },
+    {
+      "name": "OutsideLab",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].lab[0]",
+        "false": "topmostSubform[0].Page1[0].lab[1]"
+      }
+    },
+    {
+      "name": "OutsideLabCharge",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].charge[0]"
+    },
+    {
+      "name": "ICDIndex",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0]._99icd[0]"
+    },
+    {
+      "name": "Diagnosis",
+      "type": "DiagnosisField",
+      "formFields": {
+        "Code": "topmostSubform[0].Page1[0].diagnosis{0}[0]"
+      }
+    },
+    {
+      "name": "ResubmissionCode",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].medicaid_resub[0]"
+    },
+    {
+      "name": "OriginalRefNo",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].original_ref[0]"
+    },
+    {
+      "name": "PriorAuthorizationNumber",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].prior_auth[0]"
+    },
+    {
+      "name": "FederalTaxIdNumber",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].tax_id[0]"
+    },
+    {
+      "name": "TaxNumberType",
+      "type": "CheckBox",
+      "formFields": {
+        "SocialSecurityNumber": "topmostSubform[0].Page1[0].ssn[0]",
+        "EmployerIdentitificationNumber": "topmostSubform[0].Page1[0].ssn[1]"
+      },
+      "formFieldsValues": {
+        "SocialSecurityNumber": "SSN",
+        "EmployerIdentitificationNumber": "EIN"
+      }
+    },
+    {
+      "name": "PatientAccountNumber",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pt_account[0]"
+    },
+    {
+      "name": "AsseptAssignment",
+      "type": "CheckBox",
+      "formFields": {
+        "true": "topmostSubform[0].Page1[0].assignment[0]",
+        "false": "topmostSubform[0].Page1[0].assignment[1]"
+      }
+    },
+    {
+      "name": "TotalCharge",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].t_charge[0]"
+    },
+    {
+      "name": "AmountPaid",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].amt_paid[0]"
+    },
+    {
+      "name": "ServiceFacilityName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].fac_name[0]"
+    },
+    {
+      "name": "ServiceFacilityStreet",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].fac_street[0]"
+    },
+    {
+      "name": "ServiceFacilityLocation",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].fac_location[0]"
+    },
+    {
+      "name": "ServiceFacilityNpi",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pin1[0]"
+    },
+    {
+      "name": "BillingProviderPhoneArea",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].doc_phone_area[0]"
+    },
+    {
+      "name": "BillingProviderPhone",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].doc_phone[0]"
+    },
+    {
+      "name": "BillingProviderName",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].doc_name[0]"
+    },
+    {
+      "name": "BillingProviderStreet",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].doc_street[0]"
+    },
+    {
+      "name": "BillingProviderLocation",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].doc_location[0]"
+    },
+    {
+      "name": "BillingProviderNpi",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].pin[0]"
+    },
+    {
+      "name": "BillingProviderSigned",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].physician_signature[0]"
+    },
+    {
+      "name": "BillingProviderDate",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].physician_date[0]"
+    },
+    {
+      "name": "BillingProviderDetails",
+      "type": "TextBox",
+      "formField": "topmostSubform[0].Page1[0].grp[0]"
+    },
+    {
+      "name": "Services",
+      "type": "InsuranceServiceField",
+      "formFields": {
+        "Suppl": "topmostSubform[0].Page1[0].Suppl{0}[0]",
+        "Emg": "topmostSubform[0].Page1[0].type{0}[0]",
+        "LocalA": "topmostSubform[0].Page1[0].local{0}a[0]",
+        "DateOfServiceFromMonth": "topmostSubform[0].Page1[0].sv{0}_mm_from[0]",
+        "DateOfServiceFromDay": "topmostSubform[0].Page1[0].sv{0}_dd_from[0]",
+        "DateOfServiceFromYear": "topmostSubform[0].Page1[0].sv{0}_yy_from[0]",
+        "DateOfServiceToMonth": "topmostSubform[0].Page1[0].sv{0}_mm_end[0]",
+        "DateOfServiceToDay": "topmostSubform[0].Page1[0].sv{0}_dd_end[0]",
+        "DateOfServiceToYear": "topmostSubform[0].Page1[0].sv{0}_yy_end[0]",
+        "PlaceOfService": "topmostSubform[0].Page1[0].place{0}[0]",
+        "Cpt": "topmostSubform[0].Page1[0].cpt{0}[0]",
+        "Mod": "topmostSubform[0].Page1[0].mod{0}[0]",
+        "ModA": "topmostSubform[0].Page1[0].mod{0}a[0]",
+        "ModB": "topmostSubform[0].Page1[0].mod{0}b[0]",
+        "ModC": "topmostSubform[0].Page1[0].mod{0}c[0]",
+        "ModD": "topmostSubform[0].Page1[0].mod{0}d[0]",
+        "Diag": "topmostSubform[0].Page1[0].diag{0}[0]",
+        "Charge": "topmostSubform[0].Page1[0].ch{0}[0]",
+        "Quantity": "topmostSubform[0].Page1[0].day{0}[0]",
+        "Plan": "topmostSubform[0].Page1[0].plan{0}[0]",
+        "Local": "topmostSubform[0].Page1[0].local{0}[0]"
+
+      }
+    }
+  ]
+}

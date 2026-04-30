@@ -1,0 +1,443 @@
+﻿using PractiZing.Base.Repositories.ChargePaymentService;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
+using PractiZing.DataAccess.ChargePaymentService.Model;
+using PractiZing.Base.Service.ChargePaymentService;
+using System.IO;
+using Microsoft.Extensions.Configuration;
+
+using PractiZing.DataAccess.Common;
+using PractiZing.Base.Repositories.MasterService;
+using PractiZing.Base.Repositories.BatchPaymentService;
+using PractiZing.Base.Object.ClaimService;
+
+using Newtonsoft.Json;
+
+
+using PractiZing.Base.Entities.MasterService;
+using System.Text;
+using PractiZing.Base.Enums.ChargePaymentEnums;
+using PractiZing.Base.Entities.ChargePaymentService;
+using PractiZing.Base.Model.Claim;
+using PractiZing.DataAccess.ChargePaymentService.Objects;
+using PractiZing.Base.Repositories.DenialService;
+using PractiZing.ClaimCreator.Prof;
+using PractiZing.ClaimCreator.Base;
+using PractiZing.Sftp;
+using PractiZing.ClaimCreator.Form;
+
+namespace PractiZing.BusinessLogic.ChargePaymentService.Services
+{
+    public class ClaimFileProcessService : IClaimFileProcessService
+    {
+        private readonly IClaimRepository _claimRepository;
+        private readonly IClaimTotalRepository _claimTotalRepository;
+        
+        private readonly IClaimChargeRepository _claimChargeRepository;
+        private readonly IInvDiagnosisRepository _invDiagnosisRepository;
+        //private readonly IFillUB04FormService _fillUB04FormService;
+        private readonly IClearingHouseRepository _clearingHouseRepository;
+        private readonly IClaimBatchRepository _claimBatchRepository;
+        private readonly IPracticeRepository _practiceRepository;
+        private readonly IInsuranceCompanyRepository _insuranceCompanyRepository;
+        private readonly IActionNoteRepository _actionNoteRepository;
+        private readonly IScrubErrorRepository _scrubErrorRepository;
+        private string _relativePath;
+        private string _baseUrl;
+        private string _claimFolder;
+        private string _fileType;
+        private string _filePath;
+        private readonly IClaimConfigRepository _claimConfigRepository;
+        private readonly IConfiguration _configuration;
+        private readonly IClaimService _claimService;
+        private readonly IPaymentChargeRepository _iPaymentChargeRepository;
+        private readonly string _senderName;
+        private ClaimFileCreator _claimFileCreator;
+
+
+        public ClaimFileProcessService(IClaimRepository claimRepository, IClaimTotalRepository claimTotalRepository,
+            IClaimChargeRepository claimChargeRepository, IInvDiagnosisRepository invDiagnosisRepository,
+            IConfiguration configuration,  IClearingHouseRepository clearingHouseRepository, IClaimBatchRepository claimBatchRepository,
+            IPracticeRepository practiceRepository, IClaimConfigRepository claimConfigRepository, IInsuranceCompanyRepository insuranceCompanyRepository, IActionNoteRepository actionNoteRepository,
+            IScrubErrorRepository scrubErrorRepository, IClaimService claimService, 
+            IPaymentChargeRepository iPaymentChargeRepository,
+            ClaimFileCreator claimFileCreator)
+        {
+            this._claimRepository = claimRepository;
+            this._claimTotalRepository = claimTotalRepository;
+            
+            this._claimChargeRepository = claimChargeRepository;
+            this._invDiagnosisRepository = invDiagnosisRepository;
+            //this._fillUB04FormService = ub04FillFormService;
+            _baseUrl = configuration["ApplicationUrl"];
+            _relativePath = configuration["AttachmentFolder"];
+            _claimFolder = configuration["ClaimViewFolder"];
+            _fileType = configuration["ClaimType"];
+            _filePath = configuration["ApiPath"];
+            _senderName = configuration["BillLast"];
+
+            this._clearingHouseRepository = clearingHouseRepository;
+            this._claimBatchRepository = claimBatchRepository;
+            this._configuration = configuration;
+            this._practiceRepository = practiceRepository;
+            this._claimConfigRepository = claimConfigRepository;
+            this._insuranceCompanyRepository = insuranceCompanyRepository;
+            this._actionNoteRepository = actionNoteRepository;
+            this._scrubErrorRepository = scrubErrorRepository;
+            this._claimService = claimService;
+            this._iPaymentChargeRepository = iPaymentChargeRepository;
+            this._claimFileCreator = claimFileCreator;
+        }
+
+        public async Task<string> ExportCms1500Async(Guid uId)
+        {
+            List<FileResultX> lstClaims = new List<FileResultX>();
+            var claim = await _claimRepository.GetByUID(uId);
+            var claimId = claim.Id;
+            var claimTotalsRows = await _claimTotalRepository.GetByClaimId(claimId, 0);
+            foreach (var item in claimTotalsRows)
+            {
+
+                int pageNumber = Convert.ToInt32(item.PageNumber);
+                FileResultX exportCms1500Result =  await ExportPdfFile(claimId, pageNumber);
+                lstClaims.Add(exportCms1500Result);
+            }
+
+            var path = GetCms1500PdfFile(lstClaims);
+            //var path = Save(lstClaims[0].File);
+            var jsonPath = JsonConvert.SerializeObject(path);
+            return jsonPath;
+        }
+
+        public string GetCms1500PdfFile(List<FileResultX> files)
+        {
+          
+            List<string> fileList = new List<string>();
+            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, _claimFolder);
+            if (!Directory.Exists(folderPath))
+                Directory.CreateDirectory(folderPath);
+
+            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, _claimFolder);
+            if (!Directory.Exists(path))
+                Directory.CreateDirectory(path);
+
+            string fileName = files.FirstOrDefault().Name.ToString().Split('_').FirstOrDefault();
+            foreach (var item in files)
+            {
+                var pdfFileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, _claimFolder, item.Name) + ".pdf";
+
+                if (File.Exists(pdfFileName))
+                    File.Delete(pdfFileName);
+                fileList.Add(pdfFileName);
+                File.WriteAllBytes(pdfFileName, item.Bytes);
+            }
+
+            
+            var firstDocument = PdfSharpCore.Pdf.IO.PdfReader.Open(fileList.FirstOrDefault().ToString(), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Modify);
+
+            int pageInsertNumber = 1;
+            foreach (var item in fileList.Skip(1))
+            {
+                var document = PdfSharpCore.Pdf.IO.PdfReader.Open(item.ToString(), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+                var pdfpage = document.Pages[0];
+                firstDocument.InsertPage(pageInsertNumber, pdfpage);
+                pageInsertNumber = pageInsertNumber + 1;
+            }
+
+            string[] splitarrayList = fileList.FirstOrDefault().ToString().Split('_');
+            var savedFileName = splitarrayList.ToList().FirstOrDefault();
+            var _fileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, _claimFolder, fileName) + ".pdf";
+
+            firstDocument.Save(_fileName);
+
+            _fileName = $"{_baseUrl}/{_relativePath}/{_claimFolder}/{fileName + ".pdf"}";
+
+            return _fileName;
+        }
+
+
+        private async Task<FileResultX> ExportPdfFile(int claimId, int pageNumber)
+        {
+            
+            var claim = await this._claimRepository.Get(claimId);
+            Base.Model.Claim.IInsuranceClaimData claimData = null;
+            FileResultX document = null;
+            var claimTotal = await this._claimTotalRepository.GetByClaimId(claimId, pageNumber);
+            if (claim != null)
+            {
+                claim.ClaimTotal = (await this._claimTotalRepository.GetByClaimId(claimId, pageNumber)).FirstOrDefault();
+
+                var chargeList = await this._claimChargeRepository.GetByClaim(claimId, pageNumber);
+
+                var inv = await this._invDiagnosisRepository.GetByInvoice(claim.InvoiceId);
+
+                claim.InsuranceServices = chargeList;
+                foreach (var item in chargeList)
+                {
+                    var array = new[] { item.ICD1, item.ICD2, item.ICD3, item.ICD4 };
+                    string diagnose = string.Join(",", array.Where(s => !string.IsNullOrEmpty(s)));
+
+                    List<string> invlist = (inv.Where(i => array.Contains(i.ICDCode))).Select(i => i.DiagnoseNo).ToList();
+                    item.DiagnoseCode = string.Join("", invlist);
+                }
+                claim.InvDiagnoses = inv;
+
+                switch (_fileType)
+                {
+                    case "Cms1500":
+                        claimData = new Cms1500ClaimData(claim);
+                        claimData = await SetBillingProvider(claim, claimData);
+                        document = await _claimFileCreator.CreateFileAsync(FormTemplateType.CMS1500, claimData);
+                        break;
+                    case "UB04":
+                        claimData = new UB04ClaimData(claim);
+                        claimData = await SetBillingProvider(claim, claimData);
+                        //document = await this._fillUB04FormService.GetFormAsync(claimData);
+                        break;
+                }
+                
+                string filename = document.Name + "_" + pageNumber.ToString();// + ".pdf";
+                document.Name = filename;
+            }
+            return document;
+
+        }
+
+        private async Task<IInsuranceClaimData> SetBillingProvider(IClaim claim, IInsuranceClaimData claimData)
+        {
+            var insuranceCompany = await this._insuranceCompanyRepository.GetById(claim.InsuranceCompanyId);
+            var insuranceCompanyUId = insuranceCompany == null ? Guid.Empty : insuranceCompany.UId;
+            var _primaryConfigHCFAFormFields = await this._claimConfigRepository.Get(claim.CarrierTypeId, insuranceCompanyUId.ToString(), null);
+            switch (_primaryConfigHCFAFormFields.Box33.ToString())
+            {
+                case "Doctor":
+                    claimData.BillingProviderName = claim.BillingProviderFacilityName;
+                    break;
+                case "Clinic":
+                    claimData.BillingProviderName = claim.BillingDoctorName;
+                    break;
+
+                default:
+                    claimData.BillingProviderName = claim.BillingDoctorName;
+                    break;
+            }
+            return claimData;
+
+        }
+
+        private string Save(FileResultX result)
+        {
+
+            string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, _claimFolder);
+            if (!Directory.Exists(filePath))
+            {
+                Directory.CreateDirectory(filePath);
+            }
+            string path = Path.Combine(filePath, "" + result.Name + "_batchReport.pdf");
+
+            using (FileStream writer = new FileStream(path, FileMode.Create))
+            {
+                writer.Write(result.Bytes, 0, result.Bytes.Length);
+            }
+            return $"{_baseUrl}/{_relativePath}/{_claimFolder}/{result.Name + "_batchReport.pdf"}";
+        }
+
+        public async Task<string> ExportM837File(Guid batchUId)
+        {
+            try
+            {
+                var batchRecord = await this._claimBatchRepository.Get(batchUId);
+
+                var clearningHouse = await this._clearingHouseRepository.GetById
+                    (batchRecord != null ? batchRecord.ClearingHouseId.Value : 0);
+
+                await this._claimBatchRepository.UpdateStatus(batchUId, BatchStatus.Pending, true, null);
+
+                var inCorrectClaims = await this._claimService.UnBatchClaims(batchUId);
+
+                var claims = await this._claimRepository.GetByBatchUId(batchUId);
+                int[] claimIds = claims.Select(i => i.Id).Distinct().ToArray();
+                await this._claimBatchRepository.UpdateClaimCount(batchUId, claims.Count());
+
+                IEnumerable<ICharges> charges = await this._claimChargeRepository.GetByClaim(claimIds);
+
+                try
+                {
+
+
+                    foreach (var item in claims)
+                    {
+                        item.ClaimTotal = (await this._claimTotalRepository.GetByClaimId(item.Id, 0)).FirstOrDefault();
+
+                        var chargeList = await this._claimChargeRepository.GetByClaim(item.Id, null);
+                        foreach (var charge in chargeList)
+                        {
+                            charge.PaymentCharges  =await this._iPaymentChargeRepository.GetPaymentsByChargeId(charge.Id);
+                        }
+
+                        var inv = await this._invDiagnosisRepository.GetByInvoice(item.InvoiceId);
+
+                        item.InsuranceServices = chargeList;
+                        foreach (var charge in chargeList)
+                        {
+                            var array = new[] { charge.ICD1, charge.ICD2, charge.ICD3, charge.ICD4 };
+                            string diagnose = string.Join(",", array.Where(s => !string.IsNullOrEmpty(s)));
+
+                            List<string> invlist = (inv.Where(i => array.Contains(i.ICDCode))).Select(i => i.DiagnoseNo).ToList();
+                            charge.DiagnoseCode = string.Join("", invlist);
+                            string code = null;
+                            foreach (var item1 in invlist)
+                            {
+
+                                if (string.IsNullOrWhiteSpace(code))
+                                    //code = (i + 1).ToString();
+                                    code = (Convert.ToInt32(inv.ToList().FindIndex(x => x.DiagnoseNo == item1)) + 1).ToString();
+                                else
+                                    //code += "," + (i + 1).ToString();
+                                    code += "," + (Convert.ToInt32(inv.ToList().FindIndex(x => x.DiagnoseNo == item1)) + 1).ToString();
+                            }
+                            charge.DiagnoseCode = code;
+                        }
+                        item.InvDiagnoses = inv;
+
+                        item.SentDate = DateTime.Now;
+                        item.Status = ClaimStatusEnum.SENT.ToString();
+                        await this._claimRepository.UpdateEntity(item);
+                    }
+
+                    // var submitter = await this._claimRepository.OrganizationSubmitterAsync(clearningHouse.SENDER_ID);
+
+                    //submitter.Contacts = GetContactInfo();
+
+                    //var converter = new ClaimProfessionalConverter(submitter, clearningHouse, DateTime.Now);
+
+                    //string x12 = await converter.ConvertAsync((claims as IEnumerable<Claim>).ToArray());
+
+                    var creator = new X12_837P_Creator(GetClaimOptions(clearningHouse));
+
+                    string x12 = creator.Create((claims as IEnumerable<Claim>));
+
+                    var path = await SaveSFTPFile(x12, clearningHouse, claims, batchUId);
+
+                    var jPath = JsonConvert.SerializeObject($"{_baseUrl}/{_relativePath}/{path}");
+
+                    await this._claimBatchRepository.UpdateStatus(batchUId, BatchStatus.Success, false, _relativePath + "/" + path);
+
+                    foreach (var item in claimIds)
+                    {
+                        var chargesData = charges.Where(i => i.ClaimId == item).ToArray();
+                        await this._actionNoteRepository.CreateObject(0, chargesData, item, "Claim sent successfully (#" + item + ")");
+                    }
+
+                    return jPath;
+                }
+                catch
+                {
+                    claims.ToList().ForEach((item) =>
+                    {
+                        item.SentDate = null;
+                        item.Status = "CREATED";
+                    });
+
+                    await this._claimRepository.UpdateEntity(claims);
+
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+     
+        public async Task<string> SaveSFTPFile(string fileX12, IClearingHouse clearingHouse, IEnumerable<IClaim> claims, Guid batchUID)
+        {
+            try
+            {
+                SftpService sftpService = GetSftpService(clearingHouse);
+                var practice = await _practiceRepository.Get(clearingHouse.PracticeId);
+                string fileName = practice.PracticeCode + $"{(long)(DateTime.Now - DateTime.MinValue).TotalMilliseconds}";
+
+                string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _relativePath, clearingHouse.FolderName);
+                if (!Directory.Exists(filePath))
+                {
+                    Directory.CreateDirectory(filePath);
+                }
+
+                string path = Path.Combine(filePath, "" + fileName + clearingHouse.ClaimExtension);
+
+                var bytes = Encoding.UTF8.GetBytes(fileX12);
+
+                using (FileStream writer = new FileStream(path, FileMode.Create))
+                {
+                    writer.Write(bytes, 0, bytes.Length);
+                }
+
+                await this._claimBatchRepository.UpdateFilePath(batchUID, $"{_relativePath}/{clearingHouse.FolderName}/{fileName + clearingHouse.ClaimExtension}");
+
+                await sftpService.UploadAsync(fileName, sftpService.claimExtension, Encoding.UTF8.GetBytes(fileX12));
+                return $"{clearingHouse.FolderName}/{fileName + clearingHouse.ClaimExtension}";
+
+            }
+            catch
+            {
+                claims.ToList().ForEach((item) =>
+                {
+                    item.SentDate = null;
+                    item.Status = "CREATED";
+                });
+
+                await this._claimRepository.UpdateEntity(claims);
+
+                await _practiceRepository.ThrowPermissionDeniedError();
+                throw;
+            }
+        }
+
+
+        private static SftpService GetSftpService(IClearingHouse clearingHouse)
+        {
+            return new SftpService(clearingHouse.Host, clearingHouse.HostPort.Value,
+                clearingHouse.UserName, clearingHouse.Password,
+                clearingHouse.ClaimDirectory, clearingHouse.ClaimExtension,
+                clearingHouse.ERADirectory, clearingHouse.ERAExtension, clearingHouse.AckDirectory,
+                clearingHouse.AckExtension);
+        }
+
+        //private ISubmitterContacts GetContactInfo()
+        //{
+        //    var sub = new SubmitterContacts();
+        //    sub.Phone = this._configuration["phoneNumber"];
+        //    sub.Fax = this._configuration["Fax"];
+        //    sub.Email = this._configuration["Email"];
+        //    sub.Extension = this._configuration["Extension"];
+        //    return sub;
+        //}
+
+        public PracticeConfig GetSenderConfig(string senderId)
+        {
+            PracticeConfig practiceConfig = new PracticeConfig();
+            practiceConfig.Code = senderId;
+            practiceConfig.Name = _senderName;
+            practiceConfig.Contact = new PracticeContact();
+            practiceConfig.Contact.Phone = this._configuration["phoneNumber"];
+            practiceConfig.Contact.Fax = this._configuration["Fax"];
+            practiceConfig.Contact.Email = this._configuration["Email"];
+            practiceConfig.Contact.Extension = this._configuration["Extension"];
+
+            return practiceConfig;
+        }
+        private ClaimOptions GetClaimOptions(IClearingHouse clearingHouse)
+        {
+            ClaimOptions options = new ClaimOptions();
+            options.ClearingHouse = clearingHouse;
+            options.PracticeConfig = GetSenderConfig(clearingHouse.SENDER_ID);
+            options.TransactionDate = DateTime.Now;
+
+            return options;
+        }
+    }
+}

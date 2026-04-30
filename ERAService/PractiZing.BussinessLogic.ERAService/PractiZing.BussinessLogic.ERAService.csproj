@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ChargePaymentService\PractiZing.BusinessLogic.ChargePaymentService\PractiZing.BusinessLogic.ChargePaymentService.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.ERAService\PractiZing.DataAccess.ERAService.csproj" />
+  </ItemGroup>
+
+</Project>

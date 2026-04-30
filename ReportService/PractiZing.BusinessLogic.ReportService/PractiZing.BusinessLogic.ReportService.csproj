@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.DataAccess.Common\PractiZing.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\..\DenialManagementService\PractiZing.DataAccess.DenialService\PractiZing.DataAccess.DenialService.csproj" />
+    <ProjectReference Include="..\..\PatientService\PractiZing.DataAccess.PatientService\PractiZing.DataAccess.PatientService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.ReportService\PractiZing.DataAccess.ReportService.csproj" />
+  </ItemGroup>
+
+</Project>

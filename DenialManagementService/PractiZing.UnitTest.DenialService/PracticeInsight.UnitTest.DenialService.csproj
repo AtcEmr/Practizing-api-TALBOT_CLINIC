@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.0.1" />
+    <PackageReference Include="RestSharp" Version="106.6.9" />
+    <PackageReference Include="xunit" Version="2.4.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Base\PractiZing.Base\PractiZing.Base.csproj" />
+    <ProjectReference Include="..\..\Common\PractiZing.UnitTest.Common\PractiZing.UnitTest.Common.csproj" />
+    <ProjectReference Include="..\PractiZing.Api.DenialService\PractiZing.Api.DenialService.csproj" />
+    <ProjectReference Include="..\PractiZing.BusinessLogic.DenialService\PractiZing.BusinessLogic.DenialService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.DenialService\PractiZing.DataAccess.DenialService.csproj" />
+  </ItemGroup>
+
+</Project>

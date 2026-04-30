@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TypeScriptToolsVersion>3.1</TypeScriptToolsVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+    <Folder Include="Logs\" />
+    <Folder Include="wwwroot\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="8.0.0" />
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="3.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ChargePaymentService\PractiZing.Api.ChargePaymentService\PractiZing.Api.ChargePaymentService.csproj" />
+    <ProjectReference Include="..\..\DenialManagementService\PractiZing.Api.DenialService\PractiZing.Api.DenialService.csproj" />
+    <ProjectReference Include="..\..\ERAService\PractiZing.Api.ERAService\PractiZing.Api.ERAService.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.Api.MasterService\PractiZing.Api.MasterService.csproj" />
+    <ProjectReference Include="..\..\PatientService\PractiZing.Api.PatientService\PractiZing.Api.PatientService.csproj" />
+    <ProjectReference Include="..\..\ReportService\PractiZing.Api.ReportService\PractiZing.Api.ReportService.csproj" />
+    <ProjectReference Include="..\..\ReportService\PractiZing.BusinessLogic.ReportService\PractiZing.BusinessLogic.ReportService.csproj" />
+    <ProjectReference Include="..\..\SecurityService\PractiZing.Api.SecurityService\PractiZing.Api.SecurityService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="EdiFabric.Core">
+      <HintPath>..\..\EDIFabric\Packages\EdiFabric.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="EdiFabric.Framework">
+      <HintPath>..\..\EDIFabric\Packages\EdiFabric.Framework.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ProjectExtensions><VisualStudio><UserProperties appsettings_1Development_1json__JSONSchema="" /></VisualStudio></ProjectExtensions>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="CommonEntities\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.5.4.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\PractiZing.DataAccess.Common\PractiZing.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\..\MasterService\PractiZing.DataAccess.MasterService\PractiZing.DataAccess.MasterService.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="8.0.0" />
+    <PackageReference Include="PDFsharp" Version="1.50.5147" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\PractiZing.BusinessLogic.Common\PractiZing.BusinessLogic.Common.csproj" />
+    <ProjectReference Include="..\..\PatientService\PractiZing.DataAccess.PatientService\PractiZing.DataAccess.PatientService.csproj" />
+    <ProjectReference Include="..\..\ReportService\PractiZing.DataAccess.ReportService\PractiZing.DataAccess.ReportService.csproj" />
+    <ProjectReference Include="..\..\SecurityService\PractiZing.BusinessLogic.SecurityService\PractiZing.BusinessLogic.SecurityService.csproj" />
+    <ProjectReference Include="..\PractiZing.DataAccess.MasterService\PractiZing.DataAccess.MasterService.csproj" />
+  </ItemGroup>
+
+</Project>
