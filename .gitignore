@@ -18,6 +18,20 @@
 docker-compose.override.yaml
 docker-compose.override.yml
 
+# Personal IDE workspace files
+*.code-workspace
+
+# Claude Code per-machine session state — NOT the team-shared framework
+# files (.claude/agents/, .claude/commands/, .claude/skills/ ARE
+# committed). settings.json holds per-developer permission allowlists
+# (and historically has had credentials pasted in); scheduled_tasks.lock
+# is process-bound state.
+.claude/settings.json
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/cache/
+.claude/logs/
+
 # User-specific files
 *.suo
 *.user

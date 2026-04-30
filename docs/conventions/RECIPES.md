@@ -155,9 +155,9 @@ VALUES (
 
 ## Add a new claim scrub rule
 
-Scrubs are dispatched from `Scrub.StoredProcedure` when `IsProcedure = 1`, or from a C# validator class when `IsProcedure = 0`.
-
-### As a stored procedure
+> **Important caveat.** The dispatch model documented in earlier drafts of this guide does not match the running code. `Scrub.IsProcedure` is commented out in the entity (`Scrub.cs:22`); `ClaimBatchRepository.RunAutoScrub` (`ClaimBatchRepository.cs:506-536`) **always** executes `Scrub.StoredProcedure` as a SQL Server stored procedure. There is no C# validator branch. The two existing rows `CPTToICDValidator` and `CPTToModifierValidator` are configured but will fail at runtime — they don't exist as stored procedures.
+>
+> Therefore: every new scrub must be a stored procedure today. The C# path is planned but unimplemented. See [add-scrub skill](../../.claude/skills/add-scrub/SKILL.md) for the full canonical recipe.
 
 **1. Author the SP** with the canonical signature:
 ```sql
@@ -166,21 +166,23 @@ CREATE PROCEDURE usp_RunScrubXX
     @ScrubId int,
     @PracticeCode nvarchar(50)
 AS BEGIN
-    -- For each row in @Charges, decide pass/fail; INSERT into ScrubError
+    SET NOCOUNT ON;
+    -- Return a result set shaped to match the existing usp_RunScrub*EM procedures.
+    -- Do NOT INSERT into ScrubError from inside the SP — the dispatcher reads result-set [0]
+    -- via SqlDataAdapter and the calling repository writes errors.
+    SELECT ... FROM @Charges WHERE <failure-condition>;
 END
 ```
 
-**2. Insert the Scrub row:**
+**2. Insert the Scrub row** (the additional flag columns exist in the live schema but the C# entity ignores them; setting them is harmless but has no runtime effect):
 ```sql
-INSERT INTO Scrub (Name, Description, DestinationId, Active, Priority, [Order], StoredProcedure, IsAutoScrub, IsProcedure, IsPracticeCentral)
-VALUES ('Scrub XX – my rule', '', 1, 1, 1, 9, 'usp_RunScrubXX', 1, 1, 0);
+INSERT INTO Scrub (Name, Description, DestinationId, Active, Priority, [Order], StoredProcedure)
+VALUES ('Scrub XX – my rule', '', 1, 1, 1, 9, 'usp_RunScrubXX');
 ```
 
 **3. Append to** [STORED_PROCEDURES.md §3.6](../../STORED_PROCEDURES.md#36-claim-scrubs-dispatched-dynamically-via-scrubstoredprocedure-pattern-24).
 
-### As a C# validator
-
-If the rule needs lookups outside the DB (e.g. an external API), implement an `IScrubValidator` and put its class name in `Scrub.StoredProcedure` with `IsProcedure = 0`. Reference how `CPTToICDValidator` and `CPTToModifierValidator` are dispatched in `ClaimBatchRepository.RunAutoScrub`.
+**4. Note the security blocker.** `POST /api/ClaimBatch/scrub` is `[AllowAnonymous]` and the `spName` parameter is taken from the query string; combined with `CommandType.StoredProcedure`, this is unauthenticated arbitrary stored-procedure execution. See [SECURITY_AND_RISKS.md](../architecture/SECURITY_AND_RISKS.md). Adding a new scrub adds one more procedure to the unauthenticated attack surface. Coordinate the endpoint hardening in the same change if at all possible.
 
 ---
 
