@@ -56,13 +56,13 @@ USER app
 
 # Each Api in this repo reads ApplicationUrl from config; ASPNETCORE_URLS
 # overrides it. Listen on all interfaces inside the container.
-ENV ASPNETCORE_URLS=http://+:8080 \
+ENV ASPNETCORE_URLS=http://+:8081 \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_USE_POLLING_FILE_WATCHER=false \
     AttachmentFolder=/attachments
 
-EXPOSE 8080
+EXPOSE 8081
 
 # SERVICE_DLL is captured at build time but we use a shell form so it's
 # resolved at container start; this lets one image always know which DLL to run.

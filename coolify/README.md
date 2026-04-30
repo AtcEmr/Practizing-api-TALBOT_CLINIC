@@ -57,7 +57,7 @@ treats the whole stack as one Application resource.
    - `patient`       → `patient.api.your-domain.example`
    - `report`        → `report.api.your-domain.example`
    - `security`      → `security.api.your-domain.example`
-   Each service's container port is `8080`; Coolify's Traefik instance
+   Each service's container port is `8081`; Coolify's Traefik instance
    terminates TLS in front of it.
 6. **Persistent storage**: the compose file declares an `attachments`
    volume mounted at `/attachments` in every container. Coolify will
@@ -81,10 +81,10 @@ The HostService aggregates routes from every other Api project, so for a
 quick smoke test:
 
 ```bash
-curl -i http://localhost:8080/   # if you've mapped host:8080
+curl -i http://localhost:8081/   # if you've mapped host:8081
 ```
 
-(Each compose service uses `expose: 8080` — not `ports:` — so locally
+(Each compose service uses `expose: 8081` — not `ports:` — so locally
 you'll need to add a `ports:` mapping in a `docker-compose.override.yaml`
 or let Coolify handle the proxying.)
 
@@ -119,10 +119,10 @@ drop a `docker-compose.override.yaml` next to the main compose file
 services:
   host:
     ports:
-      - "5001:8080"     # http://localhost:5001/
+      - "5001:8081"     # http://localhost:5001/
   chargepayment:
     ports:
-      - "5002:8080"
+      - "5002:8081"
   # ... etc
 ```
 
@@ -137,7 +137,7 @@ Two patterns work:
    `https://api.your-domain.example`. The browser → Coolify Traefik
    → `host` container.
 2. **Internal DNS**: set the UI's `API_URL` to
-   `http://practizing-host:8080`. Both stacks must be on the `coolify`
+   `http://practizing-host:8081`. Both stacks must be on the `coolify`
    network (they are, with this config). Faster, no public hop, and the
    API never needs a public hostname. CORS becomes a non-issue.
 
@@ -156,7 +156,7 @@ Two patterns work:
   `app.UseSwaggerUI(...)` in their `Startup.cs` — patch them to read the
   same flag before going to a public domain.
 - **TLS**: the apps listen on plain HTTP inside the container. Coolify's
-  reverse proxy terminates TLS. Do not expose container port `8080`
+  reverse proxy terminates TLS. Do not expose container port `8081`
   directly to the internet.
 - **Logs**: services use `loggerFactory.AddConsole` only. Coolify
   captures stdout/stderr by default; for retention longer than the

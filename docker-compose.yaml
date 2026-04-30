@@ -2,7 +2,7 @@
 #
 # Each service builds the same parameterized Dockerfile with a different
 # SERVICE_PROJECT / SERVICE_DLL build-arg. All services listen on container
-# port 8080 and are exposed to the Coolify proxy via subdomains (configure
+# port 8081 and are exposed to the Coolify proxy via subdomains (configure
 # the public hostname per service in the Coolify UI).
 #
 # Database is NOT defined here. Provide a managed SQL Server (Coolify
@@ -20,7 +20,7 @@ x-api-common: &api-common
   restart: unless-stopped
   environment:
     ASPNETCORE_ENVIRONMENT: Production
-    ASPNETCORE_URLS: http://+:8080
+    ASPNETCORE_URLS: http://+:8081
     SiteLocale: ${SITE_LOCALE:-en-GB}
     ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
     ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
@@ -40,9 +40,9 @@ x-api-common: &api-common
   #   services:
   #     host:
   #       ports:
-  #         - "8080:8080"
+  #         - "8081:8081"
   expose:
-    - "8080"
+    - "8081"
   networks:
     - coolify       # shared with Coolify's Traefik proxy and other stacks
     - practizing    # private, for inter-service traffic in this stack
@@ -63,7 +63,7 @@ services:
     container_name: practizing-host
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_URLS: http://+:8081
       SiteLocale: ${SITE_LOCALE:-en-GB}
       ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
       ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
