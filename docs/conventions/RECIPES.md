@@ -104,13 +104,28 @@ var result = await ExecuteStoredProcedureAsync<DenialDTO>("usp_GetDenials", agin
 using (var con = new SqlConnection(Connection.ConnectionString))
 using (var cmd = new SqlCommand("usp_DoThing", con) { CommandType = CommandType.StoredProcedure })
 {
-    cmd.Parameters.AddWithValue("@Name", name);
-    cmd.Parameters.AddWithValue("@PracticeId", LoggedUser.PracticeId);
+    // Explicit SqlParameter types. Do NOT use AddWithValue — it infers types
+    // from runtime values, causing index scans (varchar column vs inferred
+    // nvarchar parameter) and silent mis-promotion (nvarchar(MAX) when the
+    // column is nvarchar(50)).
+    cmd.Parameters.Add(new SqlParameter("@Name", SqlDbType.VarChar, 100) { Value = name });
+    cmd.Parameters.Add(new SqlParameter("@PracticeId", SqlDbType.Int) { Value = LoggedUser.PracticeId });
+
     await con.OpenAsync();
     using var reader = await cmd.ExecuteReaderAsync();
     // …
 }
 ```
+
+**For TVP (table-valued) parameters** (e.g. the `ChargeType` TVP used by scrubs):
+```csharp
+var tvp = new SqlParameter("@Charges", SqlDbType.Structured) {
+    Value     = chargesDataTable,
+    TypeName  = "dbo.ChargeType"          // must match the DB-side type name
+};
+cmd.Parameters.Add(tvp);
+```
+Setting `SqlDbType.Structured` + `TypeName` is mandatory for TVPs in any new dispatcher code. The legacy `RunAutoScrub` path works because SqlClient infers Structured from a `DataTable`, but that's an implementation accident — don't rely on it.
 
 **Then update the catalog**: append a row to the appropriate section of [STORED_PROCEDURES.md](../../STORED_PROCEDURES.md) so future agents can find it. The catalog is the single source of truth for which SPs are wired up.
 

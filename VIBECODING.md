@@ -60,8 +60,27 @@ Read in order on first contact with this codebase:
 | [docs/architecture/DATA_FLOW.md](docs/architecture/DATA_FLOW.md) | UI → API → DB request path, worked examples, multi-tenant rules. |
 | [docs/architecture/SECURITY_AND_RISKS.md](docs/architecture/SECURITY_AND_RISKS.md) | The "do not break" list. Read before any non-trivial change. |
 | [docs/conventions/RECIPES.md](docs/conventions/RECIPES.md) | Canonical "how to add X" patterns. |
-| [STORED_PROCEDURES.md](STORED_PROCEDURES.md) | Every active SP, its caller, and the dispatch tables. |
+| [STORED_PROCEDURES.md](STORED_PROCEDURES.md) | Every active SP, its caller, the dispatch tables, and known-broken references. |
 | [docs/database/](docs/database/) | DB schema (maintained by Codex). |
+| [docs/database/sql-server-to-postgres-migration-plan.md](docs/database/sql-server-to-postgres-migration-plan.md) | The PostgreSQL migration plan. Read before authoring any new stored procedure. Defines "migration-safe mode." |
+
+## Migration-safe mode
+
+The team is moving from SQL Server to PostgreSQL on a multi-quarter timeline. While that's underway, every code change should respect a small set of **migration-safe** rules that keep the backlog from growing.
+
+When migration-safe mode is **active** (ask the user; or check whether the migration plan has been formally adopted):
+
+1. **No new SQL Server stored procedures** unless explicitly approved. Prefer typed C# query handlers / services. If you must add one, mark it `[migration-debt]` in [STORED_PROCEDURES.md](STORED_PROCEDURES.md) so the retirement project can budget for it.
+2. **No new uses of `BaseRepository.ExecuteStoredProcedureAsync`.** Route SP calls through the planned `IRoutineExecutor` boundary if it exists, or keep them confined to the legacy paths that are already there.
+3. **No new T-SQL features** that don't translate cleanly: `NEWID()`, `GETDATE()`, `TOP`, `ISNULL`, `WITH (NOLOCK)`, `MERGE`, `OUTPUT INTO`, `SCOPE_IDENTITY()`. Use portable equivalents (`COALESCE`, parameter for the date, etc.).
+4. **No new triggers.** The 221 existing triggers are already a migration burden; do not add to them. Use application-level audit writes.
+5. **No new `dbo.PZ_Report.Command` strings of executable SQL.** When adding a report, prefer a code-side handler and a `ReportKey`. If the legacy column is the only way today, mark the row.
+6. **No new `Scrub.StoredProcedure` rows that depend on a C# validator branch** — that branch isn't implemented. See the [add-scrub skill](.claude/skills/add-scrub/SKILL.md).
+7. **All raw SQL must use explicit `SqlParameter` typing** (not `AddWithValue`) so the same code can move to Npgsql with minimal changes.
+
+When migration-safe mode is **not** active (early development, or the team has not yet committed): follow current conventions, but every new SP/trigger you add will have to be retired later. Tag them anyway.
+
+The skills in `.claude/skills/` each have a "Migration-safe mode" section that maps to these rules.
 
 ---
 
@@ -73,8 +92,9 @@ Specialist agents that investigate without editing. Use them via slash commands 
 |---|---|
 | `feature-tracer` ([.claude/agents/feature-tracer.md](.claude/agents/feature-tracer.md)) | You need to know how a feature works end-to-end before touching it. |
 | `sp-impact-analyzer` ([.claude/agents/sp-impact-analyzer.md](.claude/agents/sp-impact-analyzer.md)) | You're about to rename, drop, or change the signature of a stored procedure. |
-| `safety-reviewer` ([.claude/agents/safety-reviewer.md](.claude/agents/safety-reviewer.md)) | You're about to merge a non-trivial change. |
+| `safety-reviewer` ([.claude/agents/safety-reviewer.md](.claude/agents/safety-reviewer.md)) | You're about to merge a non-trivial change. Default scope covers committed + staged + unstaged + untracked. |
 | `db-introspector` ([.claude/agents/db-introspector.md](.claude/agents/db-introspector.md)) | You need actual DB state — table columns, SP body, dependency lookup. Read-only. |
+| `test-coverage-planner` ([.claude/agents/test-coverage-planner.md](.claude/agents/test-coverage-planner.md)) | You're about to merge code without tests, or want to plan what to test for a feature. |
 
 For agents other than Claude (Codex, Gemini): the subagent files are plain Markdown with YAML frontmatter. The frontmatter `description` and the body's "Method" + "Output shape" sections are the contract. You can adapt them to your own runner format.
 
@@ -88,8 +108,9 @@ Step-by-step playbooks with built-in guardrails. Each skill names the convention
 |---|---|
 | [`add-api-endpoint`](.claude/skills/add-api-endpoint/SKILL.md) | Add a new CRUD endpoint to one of the 9 API services. |
 | [`add-report`](.claude/skills/add-report/SKILL.md) | Add a report to the Reports menu. Usually no C# changes — just a `PZ_Report` row. |
-| [`add-scrub`](.claude/skills/add-scrub/SKILL.md) | Add a claim-scrub rule (SP-based or C#-validator-based). |
+| [`add-scrub`](.claude/skills/add-scrub/SKILL.md) | Add a claim-scrub rule. Today every scrub row runs as a SQL Server stored procedure (the C# validator path is documented but unimplemented in current code). |
 | [`add-admin-screen`](.claude/skills/add-admin-screen/SKILL.md) | Add a master-data list+detail screen in the root admin Angular app. |
+| [`write-tests`](.claude/skills/write-tests/SKILL.md) | Author tests after `/coverage-plan` produces a P0 list. Picks the right layer (unit / repository contract / API integration / golden-master / UI) and follows the codebase's existing patterns. |
 
 Skills are deliberately opinionated. They reflect this codebase's conventions, not generic .NET / Angular advice. If your task doesn't match a skill, follow the closest [recipe in RECIPES.md](docs/conventions/RECIPES.md).
 
@@ -103,8 +124,9 @@ User-typed shortcuts that dispatch to subagents. Open the file under `.claude/co
 |---|---|
 | `/trace-feature <name>` | Walks UI → API → DB for the named feature; returns file:line citations. |
 | `/sp-impact <sp_name>` | Shows the blast radius of changing the named SP across code, `PZ_Report`, `Scrub`, dependencies, and SQL Agent. |
-| `/safety-review [staged]` | Runs the pre-merge checklist against the current diff. |
+| `/safety-review [staged\|committed]` | Runs the pre-merge checklist. Default covers committed + staged + unstaged + untracked. |
 | `/db-query <question>` | Read-only query against the live DB. |
+| `/coverage-plan [feature]` | Plans tests for the current change set or a named feature. Returns prioritized P0/P1/P2 list. |
 
 ---
 

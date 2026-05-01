@@ -84,7 +84,7 @@ Almost every repo inherits `BaseRepository<T>` (`Common/PractiZing.BusinessLogic
 ### 4.4 Three SP invocation patterns
 See [STORED_PROCEDURES.md §2](../../STORED_PROCEDURES.md#2-sp-invocation-patterns-in-the-api). Short form:
 - **Pattern A** — `ExecuteStoredProcedureAsync` (default; risky for untrusted input)
-- **Pattern B** — Raw `SqlCommand` + `CommandType.StoredProcedure` + `Parameters.AddWithValue` (use this when input is untrusted, when you need a `DataTable`, or when a TVP/scrub-style parameter is involved)
+- **Pattern B** — Raw `SqlCommand` + `CommandType.StoredProcedure` + **explicit `SqlParameter` typing** (use this when input is untrusted, when you need a `DataTable`, or when a TVP/scrub-style parameter is involved). Avoid `AddWithValue` — it infers types from runtime values, which can promote ASCII strings to `nvarchar` (forcing index scans) or pick `nvarchar(MAX)` when the column is `nvarchar(50)`. For TVPs you must set `SqlDbType.Structured` and `TypeName` explicitly.
 - **Pattern C** — Inline `EXEC` SQL string (legacy; use Pattern B instead in new code)
 
 ### 4.5 DB-dispatched SP names

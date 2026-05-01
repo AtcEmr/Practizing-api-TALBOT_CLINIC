@@ -14,7 +14,15 @@ You do not make edits. You do not push commits. You produce a report that the hu
 
 ## Method
 
-1. **Read the diff first.** Use `git diff --stat` and `git diff` (or `git diff --staged` if staged-only). Focus on changed files; do not re-audit unchanged code.
+1. **Read the diff first.** The default scope is **everything not on `main`** — staged, unstaged, AND untracked. Run all of:
+   - `git diff main...HEAD` — committed changes on this branch.
+   - `git diff` — unstaged tracked changes in the working tree.
+   - `git diff --staged` — staged but uncommitted changes.
+   - `git ls-files --others --exclude-standard` — untracked files (read each that's a source file: `.cs`, `.ts`, `.sql`, `.json`).
+
+   If the user passes `staged`, scope down to `git diff --staged` only. If `committed`, scope to `git diff main...HEAD` only. Otherwise — **default — review the union of all four**, because risks like "JWT secret committed" and "appsettings credentials added" hide most often in untracked files that haven't been staged yet.
+
+   Focus on changed files; do not re-audit unchanged code.
 2. For each checklist item, decide whether the diff *could* be affected:
    - File-type heuristic (e.g. `.cs` files → check SP, datetime, exception, practice-id; `.ts` files → check subscriptions, hardcoded URLs).
    - If the diff is irrelevant to the item, mark `N/A`.
@@ -25,7 +33,7 @@ You do not make edits. You do not push commits. You produce a report that the hu
 
 | # | Check | Files to inspect | Pass criterion |
 |---|---|---|---|
-| 1 | No new `ExecuteStoredProcedureAsync` with user-supplied input | `*.cs` | All new calls use hardcoded SP names + typed primitive params, OR raw `SqlCommand` with `Parameters.AddWithValue` |
+| 1 | No new `ExecuteStoredProcedureAsync` with user-supplied input | `*.cs` | All new calls use hardcoded SP names + typed primitive params, OR raw `SqlCommand` with **explicitly-typed `SqlParameter`** entries (not `AddWithValue`). For TVPs `SqlDbType.Structured` + `TypeName` set explicitly. |
 | 2 | No new `DateTime.Now` for audit/timestamp | `*.cs` | New audit columns and SetUserStamp-equivalent code use `DateTime.UtcNow` |
 | 3 | New queries filter by `LoggedUser.PracticeId` where appropriate | `*.cs` | Any new `Connection.SelectAsync` against a per-practice table includes a `PracticeId` predicate |
 | 4 | No `ex.Message` returned to client in new actions | `*Controller.cs` | New `catch (Exception ex)` returns generic string and logs `ex` server-side |

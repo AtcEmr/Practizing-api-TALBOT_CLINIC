@@ -27,7 +27,19 @@ Reports in Practizing are dispatched from the `PZ_Report` table. The Reports men
 3. **Result shape** — column list. Drives both the SP and the RDLC dataset.
 4. **Naming**: SP must start with `rpt_` for a report (codebase convention). PascalCase or snake_case is OK — match neighbors.
 
-## Steps
+## Migration-safe mode
+
+> Read this before authoring a new stored procedure.
+
+The team is moving toward retiring SQL Server stored procedures (see [docs/database/sql-server-to-postgres-migration-plan.md](../../../docs/database/sql-server-to-postgres-migration-plan.md)). Adding a new `rpt_*` SP works in the current architecture but adds to the migration backlog.
+
+If the migration is in flight (ask the user or check the migration plan's status):
+- **Prefer adding a typed query handler in C# over a new stored procedure.** The handler lives in `ReportService` next to `ReportRepository`, exposes the same parameter shape, and produces the same dataset for the RDLC layout. The migration plan's `IReportQueryExecutor` boundary makes this trivial once it exists.
+- **If you must add an SP** (genuine performance need that the optimizer handles better than the application): mark the new SP in [STORED_PROCEDURES.md](../../../STORED_PROCEDURES.md) with `[migration-debt]` so the retirement project sees it and budgets for the conversion.
+
+If migration mode is **not** active, follow the SP path below.
+
+## Steps (current SP-based path)
 
 ### 1. Author the SP in the DB
 
@@ -35,32 +47,31 @@ Convention: name starts with `rpt_`, parameters are `@PascalCase`.
 
 ```sql
 CREATE PROCEDURE rpt_AgingByProvider
-    @FromDate datetime,
-    @ToDate datetime,
-    @ProviderID int
+    @FromDate    datetime,
+    @ToDate      datetime,
+    @ProviderID  int
 AS
 BEGIN
     SET NOCOUNT ON;
 
     SELECT
         c.ChargeId,
-        p.LastName + ', ' + p.FirstName AS PatientName,
+        p.LastName + ', ' + p.FirstName    AS PatientName,
         c.DOS,
         c.Total,
         c.Balance,
-        DATEDIFF(day, c.DOS, GETDATE()) AS AgeDays
+        DATEDIFF(day, c.DOS, GETDATE())    AS AgeDays
     FROM Charge c
     INNER JOIN Patient p ON p.Id = c.PatientId
-    WHERE c.PracticeId = (SELECT TOP 1 PracticeId FROM PZ_User WHERE Id = @@PROCID)  -- example only; usually you set practiceId from session
-      AND c.DOS BETWEEN @FromDate AND @ToDate
+    WHERE c.DOS BETWEEN @FromDate AND @ToDate
       AND (@ProviderID = 0 OR c.ProviderId = @ProviderID);
 END
 ```
 
 **Required guarantees:**
-- Filter by practice. Reports run inside the practice-specific connection chosen by `DataBaseContext`, so plain queries on per-practice tables are scoped, but if your SP uses dynamic SQL or cross-DB joins, double-check.
-- Parameter names match the placeholders you'll put in `Command`.
-- Keep dataset shape stable — RDLC bindings are positional/named to columns; renaming a column breaks the layout.
+- **Practice scoping is implicit.** `DataBaseContext` opens the practice-specific connection by HTTP host header before the SP runs, so a plain `WHERE` on per-practice tables (`Charge`, `Payment`, etc.) is already scoped to the right practice. **Do not** add `WHERE PracticeId = (subquery)` — earlier drafts of this skill suggested `WHERE PracticeId = (SELECT TOP 1 PracticeId FROM PZ_User WHERE Id = @@PROCID)` which is wrong: `@@PROCID` is the current procedure's `object_id`, not a user id, so the subquery either matches nothing or matches an unrelated row by coincidence. **Delete that pattern wherever you see it.** If you genuinely need an explicit practice filter (cross-practice query, dynamic SQL, etc.), pass `@PracticeId int` as a parameter from the caller.
+- **Parameter names match the placeholders** you'll put in `PZ_Report.Command`.
+- **Dataset shape stays stable** — RDLC bindings are named to columns; renaming a column breaks the layout.
 
 ### 2. Insert the dispatch row in `PZ_Report`
 

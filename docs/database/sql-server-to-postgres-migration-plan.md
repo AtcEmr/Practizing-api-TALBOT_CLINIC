@@ -37,21 +37,22 @@ The original plan correctly says "stabilize first" but leaves several foundation
 
 ### .NET runtime target
 
-**Target: .NET 8 LTS.**
+**Target: .NET 10 LTS for the migration end state. .NET 8 may be used only as a short-lived intermediate target if package constraints force it.**
 
 Reasoning:
 - .NET Core 2.1 has been out of support since August 2021. No security patches; many modern packages no longer publish 2.1-compatible builds.
-- .NET 8 is the current LTS through November 2026. Skip .NET 6 (EOL November 2024 — forces a second migration sooner) and .NET 9 (STS, only 18 months of support).
+- As of 2026-04-30, .NET 8 support ends on 2026-11-10. This plan estimates 13-18 months end-to-end and 9-12 months to pilot cutover, so .NET 8 would be at or near end-of-support before the migration finishes. .NET 10 LTS is the safer target. Source: https://dotnet.microsoft.com/platform/support/policy.
+- Skip .NET 6 and .NET 9 as final targets. If the team uses .NET 8 as a stepping stone, record it as an intermediate milestone with a dated .NET 10 checkpoint before pilot cutover.
 - This decision must happen before the PostgreSQL provider work because the Npgsql / OrmLite versions you can use are gated on the runtime.
 
 What this forces:
-- ServiceStack OrmLite must move from `5.0.2` to a current version supporting .NET 8. License/version check required.
+- ServiceStack OrmLite must move from `5.0.2` to a current version supporting the final runtime target. License/version check required.
 - JWT handling moves from the legacy stack to current `Microsoft.AspNetCore.Authentication.JwtBearer`. The custom `PractiZingJwtTokenHandler` has to be revalidated against the current handler.
-- `EdiFabric` license + version must be revalidated against modern .NET. EdiFabric publishes a `.NET 6+` SDK; verify the team's license covers it.
+- `EdiFabric` license + version must be revalidated against modern .NET. The HintPaths in `ClaimService\PractiZing.ClaimCreator.Prof\PractiZing.ClaimCreator.Prof.csproj` currently point at `..\..\lib\EdiFabric.Framework\DLLs\net45\` — those DLLs target .NET Framework 4.5 and **will not load under .NET 10** without an upstream package upgrade or replacement. The HintPath relocation itself was fixed in commit `0c6ddb7`; the framework-target gap is the remaining blocker. Do not treat the runtime upgrade as complete until this is resolved.
 - Replace `System.Data.SqlClient` with `Microsoft.Data.SqlClient` even before introducing Npgsql — the former is on life support.
 - Defer `Newtonsoft.Json` → `System.Text.Json` to a post-migration project. The surface change is too wide to ride along.
 
-When this happens: **Phase 1 (baseline)**. The PostgreSQL work cannot start in earnest until the build is green on .NET 8.
+When this happens: **Phase 1 (baseline)**. The PostgreSQL work cannot start in earnest until the build is green on the final supported LTS runtime, or until leadership explicitly accepts a documented .NET 8 intermediate step with a funded .NET 10 checkpoint.
 
 ### Data-access library
 
@@ -65,7 +66,7 @@ Why not Dapper-only:
 
 What the OrmLite path forces:
 - Verify the current ServiceStack license bundle includes `ServiceStack.OrmLite.PostgreSQL`.
-- OrmLite supports running multiple dialects from one `OrmLiteConnectionFactory` — that's how the dual-run pilot will keep some tenants on SQL Server while one tenant moves to PG. Confirm before committing.
+- Verify OrmLite can run both SQL Server and PostgreSQL dialect providers safely in the same application lifetime. If one `OrmLiteConnectionFactory` cannot do this cleanly, use provider-specific factories behind `IDatabaseConnectionFactory`.
 - Audit every use of SQL-Server-only OrmLite features: `OrmLiteConfig.SqlExpressionSelectFilter`, dialect-specific `Sql.Custom`, raw `WITH (NOLOCK)` hints in `Connection.ExecAsync`. Each must move behind `IDatabaseDialect` (see "Concrete Boundary Interfaces" below).
 
 ### Multi-tenant model
@@ -81,7 +82,10 @@ Decision matrix:
 | **Shared tables, tenant column** | Simplest schema; easiest cross-tenant queries | Largest blast radius for app bugs (a missing `WHERE PracticeId = ?` leaks data across practices); per-tenant PITR is hard; row-level security is real work to set up and audit | **NO**. The current code already misses PracticeId filters in places (`BaseRepository.cs:48` defaults to 1). Shared-table model amplifies that bug class — unacceptable for medical billing data. |
 
 What schema-per-practice forces:
-- `DataBaseContext` simplifies — one connection factory; `search_path` set per request from the host header.
+- `DataBaseContext` changes from "open the named SQL Server connection" to "open a PG connection and set the practice schema".
+- Practice code must come from an authenticated/allowlisted practice registry, not directly from `Origin`, `Referer`, or `Host`. The current header-derived practice routing is not safe enough for schema selection.
+- `search_path` must be set and reset for every pooled connection checkout. Prefer `SET LOCAL search_path ...` inside transaction scopes; otherwise reset to `public` on dispose/return-to-pool.
+- Add tenant-isolation integration tests that make two sequential requests on the same pooled connection and prove tenant A cannot read tenant B's rows.
 - Migration tooling: a per-schema runner. Recommend Flyway (battle-tested for multi-schema), or Liquibase. Avoid hand-rolled.
 - Backup strategy: full-cluster PITR + selective `pg_dump` per schema for tenant-level recovery.
 - Coolify deployment: one PG service, not 30. Simpler operationally.
@@ -104,7 +108,7 @@ If the team chooses lower_snake_case anyway: budget +3 months and add a Phase 5.
 
 ### Data-migration tooling
 
-**Recommendation: `pgloader` for bulk transfer + custom C# validators for finance, FK integrity, and case-sensitivity.**
+**Recommendation: run a `pgloader` proof-of-concept first; use it for bulk transfer only if full-schema validation succeeds. Pair it with custom C# validators for finance, FK integrity, and case-sensitivity.**
 
 Why not AWS DMS / Azure DMS:
 - The source DB is on-prem (`10.3.104.52`). Routing data to a cloud-managed service for transformation adds compliance burden (PHI in transit through a third-party service) and bandwidth cost. Only consider if the destination PG is also in that cloud.
@@ -113,13 +117,18 @@ Why not SSIS:
 - Heavy investment for a one-shot migration; harder to rerun cleanly during testing iterations.
 
 Why not pure custom C#:
-- pgloader handles 80% of the schema-to-schema mechanics for free: type mapping, GUID→uuid, bit→boolean, COPY-based bulk loading, sequence resync. Reinventing that costs weeks.
+- pgloader may handle a large share of schema-to-schema mechanics: type mapping, GUID→uuid, bit→boolean, COPY-based bulk loading, sequence resync. Reinventing that costs weeks, but do not assume pgloader handles this schema until a full proof run passes.
 
 What pgloader handles automatically:
 - Type mapping per the table in §"Current Data Type Usage".
 - Identity column → sequence with the correct start value.
 - Bulk COPY for performance (orders of magnitude faster than INSERT).
 - Most default-constraint translation.
+
+Decision gate:
+- Run pgloader against the complete schema snapshot, not a subset.
+- Prove it preserves quoted PascalCase identifiers, required defaults, identity/sequence values, deprecated `text`/`image` conversions, and the schema-per-practice target layout.
+- Treat stored procedures, triggers, table-valued parameters, computed columns, and report/scrub executable SQL as out of scope for pgloader. They still need explicit migration work.
 
 What you must validate in custom C# (cannot rely on pgloader):
 1. **Money totals per table** — sum SQL Server, sum PostgreSQL, fail if delta > $0.01. Tables to validate: `Charge`, `Payment`, `PaymentAdjustment`, `Voucher`, `Invoice`, `ChargeBatch`, `PaymentBatch`. This is the financial-correctness gate.
@@ -141,6 +150,10 @@ The current codebase has secrets that will be carried into migration artifacts u
 | EMR credentials in JWT claims | `Common/.../IdentityUser.cs` (claims sent to UI) | Stop putting them in claims (preferred — call EMR server-side), or at minimum encrypt with a key not visible to the client. | Security |
 | ServiceStack license key | If checked in, audit. | Move to env var. Rotate if appropriate. | Backend lead |
 | Permission filter disabled | `Common/.../SecuredFilterAttribute.cs` (commented out) | Either re-enable with role/permission lookup wired up, OR remove `[Authorize]` from endpoints that intentionally accept any authenticated user, so the contract is honest. Today's behavior is "every authenticated user can hit every endpoint." | Security |
+
+Additional Phase 0 gates:
+- `git filter-repo` rewrites repository history. Rotate affected credentials first, coordinate with all collaborators, and publish fresh-clone/rebase instructions before rewriting.
+- Include the anonymous scrub endpoint with client-supplied `spName` in the permission cleanup. Otherwise it remains an executable database entry point even after the general permission filter is fixed.
 
 **Do not start writing PostgreSQL adapter code with the JWT secret still committed.** You will copy it into the migration artifacts and re-leak it. The same applies to dev DB credentials — pgloader configs and DBA scripts that reference them will end up in the migration repo.
 
@@ -164,7 +177,7 @@ Anti-patterns (do NOT pilot on):
 - A new practice (no historical data to compare against).
 - A practice with active billing-correctness audits (you'd contaminate the audit).
 
-Pilot duration: 4 weeks of dual-run before considering cutover. Two month-end closes within the pilot, since month-end exposes batch jobs and aging reports that don't run daily.
+Pilot duration: use 8-10 weeks if requiring two month-end closes. Four weeks is enough for a smoke dual-run only, not a real medical-billing pilot.
 
 ## Current SQL Server Coupling
 
@@ -974,7 +987,7 @@ Inserted between Phase 1 (baseline) and Phase 2 (compatibility boundary). The or
 **Goal:** every direct SqlClient call in the codebase is either deleted (if dead) or converted to use the existing OrmLite `Connection`. Result is a known, bounded surface for Phase 2 to wrap.
 
 **Required work:**
-1. Inventory: produce a list of all 15 SqlClient files plus the 7 `CommandType.StoredProcedure` direct-usage sites. For each, record:
+1. Inventory: produce a complete list of the 15 SqlClient files **plus** the 7 direct `CommandType.StoredProcedure` sites — these overlap partially but not fully, and the V3 review confirmed direct SP usage exists in non-scrub repositories (`ChargesRepository`, `PaymentRepository`, `DynmoPaymentsRepository`, generated dataset code). For each, record:
    - File:line
    - Why it bypassed OrmLite (often: needed `DataTable` for Excel export, or needed TVP for scrubs)
    - Whether the use case is still valid
@@ -985,7 +998,7 @@ Inserted between Phase 1 (baseline) and Phase 2 (compatibility boundary). The or
 6. Delete commented-out SqlClient code (per the API safety review, multiple files have these).
 
 **Acceptance criteria:**
-- Direct SqlClient usage is reduced to no more than the 6 known scrub TVP call sites.
+- Direct SqlClient usage is reduced to an explicitly documented exception list only. Do not assume every remaining `CommandType.StoredProcedure` site is scrub-related; current grep shows direct stored-procedure usage in `ClaimBatchRepository`, `ChargesRepository`, `PaymentRepository`, `DynmoPaymentsRepository`, and generated dataset code.
 - All Excel export paths route through one helper (call it `IExcelDataSource`) — Phase 2 will provide its PG implementation.
 - `System.Data.SqlClient` references replaced with `Microsoft.Data.SqlClient` everywhere.
 - Build still green; no behavior change.
@@ -1669,7 +1682,7 @@ The original plan has no sizing. Without it, leadership cannot fund the project 
 |---|---|---|---|
 | **0**  | Stack decisions | M | 2 | Ratify with leadership; no code. |
 | **0**  | Security cleanup | M | 2 | JWT secret, dev creds, permission filter. Mostly mechanical, blocks everything else. |
-| **1**  | Build + test baseline + .NET 8 upgrade | XL | 8 | Largest pure-engineering item before migration starts. Risk: vendor library incompat (EdiFabric, OrmLite, ServiceStack license). |
+| **1**  | Build + test baseline + runtime upgrade | XL | 8 | Largest pure-engineering item before migration starts. Target .NET 10 LTS unless .NET 8 is explicitly approved as a temporary stepping stone. Risk: vendor library incompat (EdiFabric, OrmLite, ServiceStack license). |
 | **1.5** | SqlClient consolidation | M | 3 | 15 files, mechanical for most. |
 | **2**  | Compatibility boundary (interfaces + wrappers) | XL | 8 | Most leveraged work. Refactor every repository's SP/raw-SQL call to go through the executor. |
 | **3**  | PG schema prototype | L | 6 | pgloader output + handwritten amendments + repeatable migration scripts. Includes naming-strategy enforcement. |
@@ -1689,7 +1702,7 @@ The original plan has no sizing. Without it, leadership cannot fund the project 
 **Sum (with parallelism):** ~13–18 calendar months from Phase 0 to last-tenant cutover for a moderately-sized customer base. Pilot tenant cutover is achievable inside 9–12 months.
 
 **Risk factors that grow these numbers:**
-- Vendor incompatibility on .NET 8 (EdiFabric or OrmLite license issues): +2–4 months on Phase 1.
+- Vendor incompatibility on the final runtime target (EdiFabric or OrmLite license issues): +2–4 months on Phase 1.
 - Trigger inventory reveals heavy business logic: +2–4 weeks on Phase 6e and adds work to 6a-d.
 - Pilot tenant uncovers regression in EDI byte-parity: +2–6 weeks.
 - Compliance audit demands stricter audit-row preservation: +2 weeks Phase 6e.
@@ -1765,16 +1778,40 @@ The practical path is:
 
 This is a significant migration. For this codebase, the stored procedure work is probably the largest part of the database migration, and scrub/report workflows should be treated as separate subprojects with their own tests and acceptance criteria.
 
+## Review Iteration Log
+
+This section records the review iterations applied to this plan. Each pass is appended below; do not edit prior entries — write a new entry instead.
+
+### V3 — Codex review of V2 (Claude → Codex)
+
+These notes were added after Codex reviewed the V2 patch against the current repo and generated SQL Server schema.
+
+1. **Runtime target changed from .NET 8 to .NET 10 LTS.** .NET 8 reaches end-of-support on 2026-11-10, which conflicts with the 13-18 month migration estimate. .NET 8 can be a stepping stone only if the team records a funded .NET 10 checkpoint.
+2. **Schema-per-practice needs stronger tenant-safety rules.** `search_path` is acceptable only if practice codes come from an allowlisted registry and pooled connections set/reset schema state every time. Do not carry forward the current header-derived routing as-is.
+3. **pgloader is a candidate tool, not a guaranteed tool.** It must pass a full-schema proof run before the team commits to it. Stored procedures, triggers, TVPs, computed columns, and executable report/scrub SQL remain separate work.
+4. **Pilot duration was corrected.** Two month-end closes require roughly 8-10 weeks. Four weeks is only a smoke dual-run.
+5. **Scrub validator behavior must be described as target design, not current behavior.** The current API does not dispatch `CPTToICDValidator` or `CPTToModifierValidator` to C# classes; it executes `Scrub.StoredProcedure` as a SQL Server stored procedure.
+6. **SqlClient consolidation must inventory actual direct SP usage.** The current grep result is 15 SqlClient files and direct `CommandType.StoredProcedure` use in multiple non-scrub repositories. The exception list must be explicit.
+7. **`usp_GetDynmoPaymentsForCatalystRCM` is missing from the generated schema snapshot.** Re-check the live DB before Phase 5, but do not leave it as a vague casing question.
+
+### V3.1 — Claude polish of V3 (Claude)
+
+Three small consistency tightenings after verifying V3 against the codebase. No new findings; all of V3 was correct.
+
+1. **EdiFabric wording softened.** The line "current build is already blocked by EdiFabric assembly resolution" was partly stale — commit `0c6ddb7` already restored the HintPaths from the gitignored `EDIFabric/Packages/` to `lib/`. The deeper issue is real (the DLLs target .NET Framework 4.5 and won't load on .NET 10), so the wording was rewritten to name the framework-target gap as the remaining blocker.
+2. **SqlClient inventory wording aligned.** Phase 1.5 inventory now consistently references the 15 SqlClient files **plus** the 7 direct `CommandType.StoredProcedure` sites, matching the V3 acceptance criteria.
+3. **Section renamed.** The previous "Codex Review Notes for Claude" became this "Review Iteration Log" so future passes (V4 from any agent) can stack cleanly without renaming.
+
 ## Outstanding Decisions / Open Questions
 
 These are decisions or unknowns the plan cannot resolve unilaterally. Each should have a named owner and a deadline before Phase 1 starts. Closed decisions should be appended to the migration decision log; open ones drive risk.
 
 ### Decisions needed from leadership
-1. **Approve .NET 8 LTS as runtime target?** (Default: yes. Owner: backend lead. Deadline: end of Phase 0.)
+1. **Approve .NET 10 LTS as runtime target?** (Default: yes. Owner: backend lead. Deadline: end of Phase 0. If .NET 8 is needed as an intermediate step, approve the .NET 10 checkpoint date at the same time.)
 2. **Approve schema-per-practice multi-tenancy?** Decision changes deployment cost and migration parallelism. (Owner: architecture lead. Deadline: end of Phase 0.)
 3. **Approve preserving PascalCase quoted identifiers?** Alternative is +3 months for lower_snake_case rename. (Owner: backend lead. Deadline: end of Phase 0.)
 4. **Approve managed PostgreSQL service (vs self-hosted)?** Operational expertise question. (Owner: ops lead. Deadline: before Phase 4.)
-5. **Approve EdiFabric license upgrade for .NET 8?** Cost question. (Owner: vendor management. Deadline: end of Phase 0.)
+5. **Approve EdiFabric license/runtime upgrade for the final .NET target?** Cost question. (Owner: vendor management. Deadline: end of Phase 0.)
 6. **Approve hybrid migration (Option C) over full retirement (Option B)?** Codex recommends hybrid; this v2 review concurs. (Owner: architecture lead. Deadline: end of Phase 0.)
 7. **Approve pilot tenant selection?** Use the rubric in §"Pilot tenant selection rubric". (Owner: product + ops. Deadline: before Phase 9.)
 8. **Approve cutover model: hard cutover with maintenance window, or CDC-based zero-downtime?** Affects Phase 10 design. (Owner: architecture + ops. Deadline: before Phase 8.)
@@ -1791,7 +1828,7 @@ These are decisions or unknowns the plan cannot resolve unilaterally. Each shoul
 3. **External report consumers** (if any practices export reports to external systems) — verify column-name and number-format parity. (Owner: account management. Deadline: before pilot.)
 
 ### Open technical questions
-1. **Is `usp_GetDynmoPaymentsForCatalystRCM` actually missing from the DB** (per the plan's note) or just lower-cased in metadata? Resolve via DB introspection. (Owner: backend lead. Deadline: end of Phase 5.)
+1. **Confirm `usp_GetDynmoPaymentsForCatalystRCM` in the live DB.** The generated schema snapshot does not include a `CREATE PROCEDURE` for it, while code and `STORED_PROCEDURES.md` reference it. Re-check the live DB before Phase 5 and either restore the procedure, remove the dead code path, or replace it in the Catalyst/Dynmo migration workstream. (Owner: backend lead. Deadline: end of Phase 5.)
 2. **Are the 8 commented-out / "Inactive" categories in `STORED_PROCEDURES.md` §5** truly orphaned, or are some of them called by SQL Agent jobs? Run the SP-impact-analyzer on each before deciding to drop. (Owner: DBA. Deadline: end of Phase 5.)
 3. **Does the ServiceStack license bundle include OrmLite PostgreSQL provider?** (Owner: backend lead. Deadline: end of Phase 0.)
 4. **Will the team accept a brief read-only window during cutover** (e.g., 30 minutes) or must it be zero-downtime? Decides whether logical replication is needed. (Owner: ops. Deadline: before Phase 8.)
@@ -1801,7 +1838,7 @@ These are decisions or unknowns the plan cannot resolve unilaterally. Each shoul
 
 ### Items the original plan flagged that this review confirms
 1. The `usp_PaymentChargeByPaymentId` reference in commented-out code is dead — confirmed via the SP catalog. Drop it cleanly during Phase 5.
-2. The two missing scrub validators (`CPTToICDValidator`, `CPTToModifierValidator`) are C# classes, not DB SPs, and are dispatched by the same `Scrub.StoredProcedure` column. Confirmed in the API safety review. Documented in the new `add-scrub` skill.
+2. The two missing scrub entries (`CPTToICDValidator`, `CPTToModifierValidator`) are configured in `Scrub.StoredProcedure`, but the current API does not dispatch them to C# classes. `Scrub.IsProcedure` is commented out and `RunAutoScrub` always executes the value as a SQL Server stored procedure. Treat the future `IScrubRuleExecutor` as target design, not current behavior.
 3. `BaseRepository.ExecuteStoredProcedureAsync` is SQL-injection-vulnerable. Confirmed. Phase 2's `IRoutineExecutor` boundary closes this surface.
 
 ## Cross-references

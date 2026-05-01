@@ -11,7 +11,7 @@ The Angular frontend is a sibling repo: `Practizing-ui-TALBOT_CLINIC` at `c:\Use
 ## ⚠ Three things you must know before editing
 
 1. **Permission filter is disabled.** Every authenticated user can hit every `[Authorize]` endpoint regardless of role. Don't write code that *assumes* the controller will reject the user — enforce role checks in the repository if needed.
-2. **`BaseRepository.ExecuteStoredProcedureAsync` is SQL-injectable.** It builds SQL by string concat. Never pass user input to it; use raw `SqlCommand` + `Parameters.AddWithValue` for untrusted input.
+2. **`BaseRepository.ExecuteStoredProcedureAsync` is SQL-injectable.** It builds SQL by string concat. Never pass user input to it; use raw `SqlCommand` with **explicit `SqlParameter` types** (avoid `AddWithValue` — its inferred types cause index scans and silent mis-promotion). For TVPs set `SqlDbType.Structured` + `TypeName` explicitly.
 3. **Reports and scrubs are DB-dispatched.** SP names live in `PZ_Report.Command` and `Scrub.StoredProcedure` columns. Adding/removing reports usually means a DB row, not a code change. Renaming an SP without checking those tables silently breaks production.
 
 The full risk list is in [docs/architecture/SECURITY_AND_RISKS.md](docs/architecture/SECURITY_AND_RISKS.md).
@@ -34,7 +34,8 @@ Quick map:
 - **`docs/architecture/`** — system overview, API deep dive, UI deep dive, data flow, security & risks. Read [SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md) first.
 - **`docs/conventions/RECIPES.md`** — canonical patterns for adding endpoints, reports, scrubs, admin screens.
 - **`docs/database/`** — DB schema and ER diagrams. Maintained by Codex. Source of truth for table-level questions.
-- **`STORED_PROCEDURES.md`** (root) — every active stored procedure, its caller in C#, API endpoint, UI screen, and inactive/orphaned SPs. Read before adding any SP call or touching report/scrub dispatch.
+- **`docs/database/sql-server-to-postgres-migration-plan.md`** — PostgreSQL migration plan. Defines "migration-safe mode" — read before adding any new stored procedure, trigger, or T-SQL feature.
+- **`STORED_PROCEDURES.md`** (root) — every active stored procedure, its caller in C#, API endpoint, UI screen, inactive/orphaned SPs, and known-broken references. Read before adding any SP call or touching report/scrub dispatch.
 
 When you create new docs, put them under `docs/` (e.g. `docs/runbooks/`, `docs/integrations/`). Root-level exceptions: `CLAUDE.md`, `VIBECODING.md`, `STORED_PROCEDURES.md`, `README.md` — those stay at root for discoverability.
 

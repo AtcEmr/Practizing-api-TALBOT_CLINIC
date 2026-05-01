@@ -65,8 +65,14 @@ Used when the SP returns a `DataTable` for Excel export, or takes a TVP / DataTa
 ```csharp
 cmd.CommandText = "rpt_Aging_Patient_Detail_By_InsuranceCompany";
 cmd.CommandType = CommandType.StoredProcedure;
-cmd.Parameters.AddWithValue("@ToDate", toDate);
-cmd.Parameters.AddWithValue("@InsuranceCompanyId", insuranceCompanyId);
+
+// Prefer explicit SqlParameter types over AddWithValue.
+// AddWithValue infers SqlDbType from the runtime value, which can mis-promote
+// (e.g. ASCII strings → nvarchar, causing index scans, or longer-than-needed
+// nvarchar(MAX) when the column is nvarchar(50)). For TVPs it works only by
+// luck of DataTable inference; new TVP code must set Structured + TypeName.
+cmd.Parameters.Add(new SqlParameter("@ToDate", SqlDbType.DateTime) { Value = toDate });
+cmd.Parameters.Add(new SqlParameter("@InsuranceCompanyId", SqlDbType.Int) { Value = insuranceCompanyId });
 ```
 
 ### 2.3 Pattern C — Inline `EXEC` text via OrmLite
@@ -122,7 +128,7 @@ UI entry point: `DenialDashboardComponent` and `DenialManagementComponent` in `p
 | `USP_ReportDataForCatalystAllCharges` | ChargesRepository.cs:3068 — `GetExcelForReportDataForCatalystAllCharges` | Catalyst export endpoint on `ChargesController` | Catalyst integration job | Bulk charges export for the Catalyst RCM partner |
 | `usp_GetActionNotesForCatalyst` | ChargesRepository.cs:3093 — `GetExcelForReportDataForCatalystAllNotes` | Catalyst export endpoint on `ChargesController` | Catalyst integration job | Action-notes feed for Catalyst |
 | `usp_GetInsurancewisePaymentReport` (`@FromDate datetime, @ToDate datetime`) | PaymentRepository.cs:963 — `GetInsurancewisePaymentReport` | `POST api/Payment/GetExcelForInsuranceWisePaymentReport` | Reports → Insurance-wise Payments (Excel) | Payment totals grouped by payer for a date range |
-| `usp_GetDynmoPaymentsForCatalystRCM` | DynmoPaymentsRepository.cs:484 — `GetDynmoPaymentsForCatalystRCM` | `DynmoPaymentsController` | Catalyst integration job | Payments feed for the "Dynmo" Catalyst pipeline |
+| `usp_GetDynmoPaymentsForCatalystRCM` ⚠ **BROKEN — see note below** | DynmoPaymentsRepository.cs:484 — `GetDynmoPaymentsForCatalystRCM` | `DynmoPaymentsController` | Catalyst integration job | Payments feed for the "Dynmo" Catalyst pipeline |
 | `usp_UpdatePayerControlNumberToClaims` | ChargeBatchRepository.cs:279 — `UpdateCCNClaims` | `GET api/chargebatch/UpdateCCNClaims` | Admin / batch utility (no obvious UI button) | Backfills payer control numbers across claims |
 | `usp_GetAllPracticesVouchers` (`@MonthId int, @YearId int`) | BankReconciliationRepository.cs:284 — `SyncData` | `POST api/bankreconciliation/sync/{monthId}/{yearId}` | Bank Reconciliation page → "Sync" | Pulls vouchers across all practices for a month/year |
 | `USP_SyncDepositsWithChasePayments` (`@MonthId int, @YearId int`) | BankReconciliationRepository.cs:373 — `SyncDepositsWithChasePayments` | `POST api/bankreconciliation/SyncDepositsWithChasePayments/{monthId}/{yearId}` | Bank Reconciliation page → "Sync with Chase" | Matches deposit records to Chase bank-feed payments |
@@ -179,22 +185,24 @@ These are NOT named in C# — the row in `PZ_Report` is the contract. UI hits `P
 
 ### 3.6 Claim scrubs dispatched dynamically via `Scrub.StoredProcedure` (Pattern 2.4)
 
-UI: ClaimBatchComponent → "Run Scrub" button → `POST api/ClaimBatch/Scrub?spName=...&scrubId=...&practiceCode=...`. C# in `ClaimBatchController.Scrub` reads `spName` from the query string, which the UI sourced from a `Scrub` table row.
+UI: ClaimBatchComponent → "Run Scrub" button → `POST /api/ClaimBatch/scrub?spName=...&scrubId=...&practiceCode=...`. The endpoint is `[AllowAnonymous]` (see [SECURITY_AND_RISKS.md §6](docs/architecture/SECURITY_AND_RISKS.md)) and reads `spName` from the query string. The UI populates `spName` from a `Scrub` table row; the API does **not** validate it against the `Scrub` table.
+
+**Dispatch reality (current code):** [`ClaimBatchRepository.RunAutoScrub`](ChargePaymentService/PractiZing.BusinessLogic.ChargePaymentService/Repositories/ClaimBatchRepository.cs) **always** executes `spName` as a SQL Server stored procedure with `CommandType.StoredProcedure`. The `Scrub.IsProcedure` and `Scrub.IsAutoScrub` columns shown in earlier drafts of this catalog **are commented out** in the C# entity ([`Scrub.cs:22-25`](ChargePaymentService/PractiZing.DataAccess.ChargePaymentService/Tables/Scrub.cs)) and therefore have no runtime effect. There is no C# validator branch.
 
 All scrub SPs share the same TVP signature: `(@Charges ChargeType /*table-valued*/, @ScrubId int, @PracticeCode nvarchar)`.
 
-| Scrub Id | Name | StoredProcedure | IsAutoScrub | IsProcedure |
-|---:|---|---|:-:|:-:|
-| 1 | Scrub 81 EM Needs Mod 25 | `usp_RunScrub81EM` | yes | no |
-| 2 | Scrub 82 EM needs Mod 24 | `usp_RunScrub82EM` | yes | no |
-| 3 | Scrub 83 EM needs Mod 57 | `usp_RunScrub83EM` | yes | no |
-| 4 | Scrub 84 Surg needs mod 58, 59, 78, 79 | `usp_RunScrub84EM` | yes | no |
-| 5 | Scrub 86 CCI Edits | `usp_RunScrub86EM` | yes | no |
-| 6 | Scrub 124 J Code Without NDC Message Code | `usp_RunScrub124` | yes | yes |
-| 7 | CPTToICDValidator | `CPTToICDValidator` *(C# validator, not a SP)* | yes | no |
-| 8 | CPTToModifierValidator | `CPTToModifierValidator` *(C# validator, not a SP)* | yes | no |
+| Scrub Id | Name | StoredProcedure | Status |
+|---:|---|---|---|
+| 1 | Scrub 81 EM Needs Mod 25 | `usp_RunScrub81EM` | OK |
+| 2 | Scrub 82 EM needs Mod 24 | `usp_RunScrub82EM` | OK |
+| 3 | Scrub 83 EM needs Mod 57 | `usp_RunScrub83EM` | OK |
+| 4 | Scrub 84 Surg needs mod 58, 59, 78, 79 | `usp_RunScrub84EM` | OK |
+| 5 | Scrub 86 CCI Edits | `usp_RunScrub86EM` | OK |
+| 6 | Scrub 124 J Code Without NDC Message Code | `usp_RunScrub124` | OK |
+| 7 | CPTToICDValidator | `CPTToICDValidator` | ⚠ **BROKEN** — no SQL Server SP exists with this name; the dispatcher will error if invoked |
+| 8 | CPTToModifierValidator | `CPTToModifierValidator` | ⚠ **BROKEN** — same reason |
 
-> Note: rows 7 and 8 are dispatched to in-process C# validators by name; the `Scrub` table is overloaded for both DB SPs and C# validator types. `IsProcedure=1` flags rows where a TVP is required.
+**Rows 7 and 8 are configured-but-broken.** Earlier framework drafts described them as "C# validators dispatched by name" — that is aspirational, not implemented. If invoked today, `RunAutoScrub` opens a `SqlConnection`, sets `cmd.CommandText = "CPTToICDValidator"`, and executes — SQL Server returns *Could not find stored procedure 'CPTToICDValidator'*. To make these work the team must either (a) create stored procedures with those names, or (b) refactor `RunAutoScrub` to branch to a C# validator dispatcher (a 1-2 day refactor; see the [add-scrub skill](.claude/skills/add-scrub/SKILL.md)).
 
 ---
 
@@ -342,9 +350,19 @@ Pulled from `sys.parameters` on `PI_ATC_CLINIC@10.3.104.52` on 2026-04-30. `(non
 
 ---
 
-## 8. Open questions / follow-ups
+## 8. Known Broken / Stale References
 
-- **Scrub rows 7 & 8** (`CPTToICDValidator`, `CPTToModifierValidator`) point at C# class names, not SPs. The dispatcher in `RunAutoScrub` distinguishes them via `IsProcedure`. Confirm with the author that this overload is intentional and not a data-cleanup target.
-- **`usp_PaymentChargeByPaymentId`** is referenced only in commented-out code at `PaymentChargeRepository.cs:540`. It is also absent from the live DB list — it appears the code-side comment is the only trace and the SP itself was already removed.
+These dependencies are referenced by the running code but the database object is missing or never existed. Treat them as bugs to triage, not "active SPs."
+
+| Reference | From | Status | Action |
+|---|---|---|---|
+| `usp_GetDynmoPaymentsForCatalystRCM` | `DynmoPaymentsRepository.cs:484` (active call site) — `cmd.CommandText = "usp_GetDynmoPaymentsForCatalystRCM"` | **Missing from live DB.** Live DB query: only `usp_GetActionNotesForCatalyst`, `USP_ImportCatalystAllChargeIntoWareHouseTable`, `USP_ReportDataForCatalystAllCharges`, `USP_ReportDataForCatalystAllCharges_Test`, `USP_ReportDataForCatalystByAccession` exist. No `Dynmo*` SPs at all. | Calling this endpoint raises a SQL error at runtime. Either (a) restore/create the SP, or (b) remove the C# endpoint if the integration is dead. Confirm with whoever owns the Catalyst Dynmo integration. |
+| `CPTToICDValidator` | `Scrub` table row 7 (active) | **Missing from live DB.** Dispatched by `RunAutoScrub` as a SQL Server SP; no such SP exists. | See §3.6. Either implement the SP, refactor the dispatcher to call C# validators, or deactivate the row (`Active = 0`). |
+| `CPTToModifierValidator` | `Scrub` table row 8 (active) | **Missing from live DB.** Same situation. | Same options as row 7. |
+| `usp_PaymentChargeByPaymentId` | `PaymentChargeRepository.cs:540` (**commented out**) | Missing from live DB. Code-side reference is the only trace. | Remove the commented code in a small cleanup PR; the SP itself is already gone. |
+
+## 9. Open questions / follow-ups
+
 - **Catalyst integration triggering** is not visible in any cron/Hangfire config in the repo. If it runs in production, it is likely fired by an external scheduler hitting the `ChargesController` endpoints. Verify before assuming the Catalyst SPs are dead.
 - **30 of 138 SPs** are actively wired up. The remaining **~108** are either SQL-Agent jobs, dead reporting code, or DBA utilities. A separate audit of SQL Agent jobs on `10.3.104.52` would close the loop.
+- **The framework's `sp-impact-analyzer` subagent** should be run against every SP before any rename/drop; the [migration plan](docs/database/sql-server-to-postgres-migration-plan.md) Phase 5 catalog leans on this.
