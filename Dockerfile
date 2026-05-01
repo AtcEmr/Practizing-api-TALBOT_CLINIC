@@ -46,17 +46,29 @@ RUN test -n "$SERVICE_DLL" || (echo "SERVICE_DLL build-arg is required" && exit 
 ENV SERVICE_DLL=${SERVICE_DLL}
 
 # Run as non-root. The aspnet base image creates uid 1000 already.
+# Pre-create /app/attachments because PatientService.Startup.cs:95 does
+# `Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "attachments")`,
+# resolving to /app/attachments, then opens a FileSystemWatcher on it.
+# If the dir doesn't exist, startup throws and the container restart-loops.
+# We also keep /attachments (the volume mount target used by HostService).
 RUN groupadd -r app && useradd -r -g app -u 1001 app \
- && mkdir -p /app /attachments \
- && chown -R app:app /app /attachments
+ && mkdir -p /app /app/attachments /attachments \
+ && chown -R app:app /app /app/attachments /attachments
 
 COPY --from=build --chown=app:app /app/publish /app
 
 USER app
 
-# Each Api in this repo reads ApplicationUrl from config; ASPNETCORE_URLS
-# overrides it. Listen on all interfaces inside the container.
-ENV ASPNETCORE_URLS=http://+:8080 \
+# Each Api's Program.cs calls `.UseUrls(new UrlConfiguration().GetAppUrl())`,
+# which reads `ApplicationUrl` from config. With ASPNETCORE_ENVIRONMENT=
+# Production and no appsettings.Production.json, that key is missing and
+# the helper returns empty string -> Kestrel falls back to localhost:5000
+# (which is unreachable from outside the container's network namespace).
+# Set ApplicationUrl explicitly so .UseUrls binds to all interfaces on 8080.
+# ASPNETCORE_URLS is set as a safety net for any service that doesn't go
+# through UrlConfiguration.
+ENV ApplicationUrl=http://+:8080 \
+    ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_USE_POLLING_FILE_WATCHER=false \
