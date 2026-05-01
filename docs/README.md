@@ -25,7 +25,7 @@ production aggregator.
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Local dev setup, how to build/run/debug, how to add a controller / repository / migration, conventions to follow |
 | [`CONFIGURATION.md`](CONFIGURATION.md) | Every environment variable, every `appsettings.json` key, who reads it, what happens if it's missing |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | Operational runbook: container layout, networking, secrets, logs, restart procedures, scaling, common failures |
-| **[`ONBOARD-NEW-PRACTICE.md`](ONBOARD-NEW-PRACTICE.md)** | **End-to-end runbook for adding a new practice / tenant. AI-agent-executable, encodes every gotcha hit during the first deploy. Start here when adding a new client.** |
+| **[`ONBOARD-NEW-PRACTICE.md`](ONBOARD-NEW-PRACTICE.md)** | **End-to-end runbook for adding a new practice / tenant. Encodes every gotcha hit during the first deploy. Start here when adding a new client.** Pairs with [`scripts/onboard/onboard.py`](../scripts/onboard/) — an interactive Python script that drives the whole runbook automatically. |
 | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Every gotcha we know about — the build issues, the runtime issues, the historical bugs and pre-existing tech debt |
 | [`GLOSSARY.md`](GLOSSARY.md) | Domain terms (Charge vs Invoice vs Claim vs Voucher vs Payment vs ERA — these recur with subtly different meanings) |
 | [`DATABASE.md`](DATABASE.md) | The two SQL Server databases, what tables live where, how the practice-multi-tenancy works |

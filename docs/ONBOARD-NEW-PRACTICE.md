@@ -8,6 +8,31 @@
 
 ---
 
+## ⚡ Want to skip the manual steps?
+
+There's an automation script that drives every step in this runbook
+end-to-end (except DNS records and the one-time Coolify setup):
+
+```bash
+# On any machine with Python 3.9+, Docker, and network access:
+git clone https://github.com/AtcEmr/Practizing-api-TALBOT_CLINIC -b coolify
+cd Practizing-api-TALBOT_CLINIC/scripts/onboard
+pip install -r requirements.txt
+python onboard.py
+```
+
+It asks for the seven inputs in [§1](#1-the-seven-inputs-you-need-collect-these-first),
+validates everything (DNS, SQL, Coolify API, SSH, free ports) before
+making any changes, then runs steps 3–6 of this runbook automatically.
+Idempotent — safe to re-run after a partial failure.
+
+See [`scripts/onboard/README.md`](../scripts/onboard/README.md) for prerequisites and
+limitations. **The rest of this document is the manual procedure** —
+useful if you don't want to run a script, can't run Python, or are
+debugging a deploy that the script didn't finish.
+
+---
+
 ## 0. Architecture in 60 seconds (read once)
 
 ```

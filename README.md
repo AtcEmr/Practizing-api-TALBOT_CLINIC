@@ -8,6 +8,16 @@ schedules, statements, reporting.
 
 ## Quick links
 
+🚀 **Adding a new practice / tenant?** See [`docs/ONBOARD-NEW-PRACTICE.md`](docs/ONBOARD-NEW-PRACTICE.md), or run the automation:
+
+```bash
+# Python 3.9+, Docker, and network access required
+git clone https://github.com/AtcEmr/Practizing-api-TALBOT_CLINIC -b coolify
+cd Practizing-api-TALBOT_CLINIC/scripts/onboard
+pip install -r requirements.txt
+python onboard.py
+```
+
 📚 **[`docs/`](docs/)** — comprehensive maintainer documentation. **Start with [`docs/README.md`](docs/README.md)**.
 
 The docs cover:

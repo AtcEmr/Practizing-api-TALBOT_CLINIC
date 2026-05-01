@@ -4,9 +4,20 @@ Interactive Python script that walks through the entire procedure in
 [`docs/ONBOARD-NEW-PRACTICE.md`](../../docs/ONBOARD-NEW-PRACTICE.md) and
 executes every step that doesn't require a human click.
 
+## ⚡ Quick start
+
+On any machine with **Python 3.9+**, **Docker**, and network access to your
+SQL Server, reverse-proxy host, and Coolify control plane:
+
+```bash
+git clone https://github.com/AtcEmr/Practizing-api-TALBOT_CLINIC -b coolify
+cd Practizing-api-TALBOT_CLINIC/scripts/onboard
+pip install -r requirements.txt
+python onboard.py
 ```
-$ python onboard.py
-```
+
+The script asks for the inputs interactively, validates everything before
+making any changes, and then deploys the practice end-to-end.
 
 ## What it does
 
