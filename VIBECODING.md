@@ -71,6 +71,16 @@ Read in order on first contact with this codebase:
 
 The team is moving from SQL Server to PostgreSQL on a multi-quarter timeline. While that's underway, every code change should respect a small set of **migration-safe** rules that keep the backlog from growing.
 
+### Rule 0 — Characterization-first TDD (overrides all others)
+
+**SQL Server is the contract. Capture tests against SQL Server before changing anything; PostgreSQL must pass the same tests unchanged.** No PG slice ships without its SQL Server fixture in the same PR (or already on `main`).
+
+This is a first-class migration principle, not a guideline. See the [Characterization-First TDD Migration Gate](docs/database/sql-server-to-postgres-migration-plan.md) section in the migration plan for the full statement, the required golden-master fixture list (reports, scrubs, SPs, EDI 837/835, payments, denials, aging, statements, multi-tenant boundary), and the per-phase impact.
+
+When in doubt: the SQL Server output is correct, including the bugs, until the migration decision log says otherwise. Coverage is secondary; **business parity is the release gate**.
+
+### Other migration-safe rules
+
 When migration-safe mode is **active** (ask the user; or check whether the migration plan has been formally adopted):
 
 1. **No new SQL Server stored procedures** unless explicitly approved. Prefer typed C# query handlers / services. If you must add one, mark it `[migration-debt]` in [STORED_PROCEDURES.md](STORED_PROCEDURES.md) so the retirement project can budget for it.

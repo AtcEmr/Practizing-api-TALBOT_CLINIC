@@ -31,6 +31,23 @@ The team's stated coverage goal is 80%. We are far below that. This planner is o
 
 ## Method
 
+### Detect characterization-first mode
+
+Before doing anything else, decide whether the change is **migration work**. Triggers:
+- The change touches `docs/database/postgres-*` files, anything under `docs/database/postgres/`, an `IRoutineExecutor` / `IDatabaseDialect` boundary, or a stored-procedure rewrite/retirement.
+- The user mentions "PG", "Postgres", "Npgsql", "migration slice", or asks to plan tests for retiring an SP.
+- The PR description references a migration phase.
+
+If migration mode is active, the planning rules change:
+- **The contract is SQL Server's current output**, not the team's intent. Any test you recommend must capture the existing SQL Server behavior and assert PG matches it.
+- **Capture-first**: for SP-backed paths, the P0 test is "record SQL Server output for these inputs into a fixture file, then assert PG produces the same output." Author-from-spec tests come later, in v1.1.
+- **Coverage is secondary**: a high-coverage migration PR with no business-parity fixture is a fail. Recommend the parity fixture as P0 even if it makes coverage look worse.
+- **Required fixtures** are listed in the [migration plan's Characterization-First TDD Migration Gate](../../docs/database/sql-server-to-postgres-migration-plan.md). For migration changes, your P0 list must reference one of those fixture types.
+
+For non-migration work, proceed with the standard method below.
+
+### Standard method
+
 1. **Locate the change.** If given a diff, parse it (`git diff main...HEAD` or as supplied). If given a feature name, run the `feature-tracer` mental model: UI → service → controller → repository → DB.
 
 2. **Identify the layers the change touches.** A typical CRUD change touches all five:

@@ -43,6 +43,7 @@ You do not make edits. You do not push commits. You produce a report that the hu
 | 8 | No prod credentials added to `appsettings.Development.json` | that file | No connection-string changes pointing at non-dev hosts |
 | 9 | `pi-lib` rebuilt if Base classes touched | UI repo | Comment in PR / commit notes the rebuild, or the developer ran `ng build pi-lib` after edits |
 | 10 | If two parallel implementations exist (`payment/` vs `old_payment_screen/`), the live one was edited | UI repo | Diff shows changes to the live file, not the dead duplicate |
+| 11 | **Characterization-first** (migration PRs only): if the change touches `docs/database/postgres-*`, an `IRoutineExecutor`/`IDatabaseDialect` boundary, an SP retirement, or PG provider code, the PR includes captured-against-SQL-Server tests OR references the commit that already landed them | any | The same fixture must run unchanged against PG. A migration PR with new tests but no SQL Server baseline capture is a **FAIL**. See [migration plan §"Characterization-First TDD Migration Gate"](../../docs/database/sql-server-to-postgres-migration-plan.md). |
 
 ## Output shape
 
@@ -62,6 +63,7 @@ Detail:
   8. No prod creds in dev json  : PASS / FAIL / N/A — <evidence>
   9. pi-lib rebuild noted       : PASS / FAIL / N/A — <evidence>
  10. Live vs dead duplicates    : PASS / FAIL / N/A — <evidence>
+ 11. Characterization-first     : PASS / FAIL / N/A — <evidence; N/A only for non-migration PRs>
 
 Other observations (worth flagging but not in the checklist):
   - …

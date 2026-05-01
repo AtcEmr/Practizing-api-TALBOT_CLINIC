@@ -183,3 +183,4 @@ The API has one (mostly empty) test project; the UI has 34 stub `.spec.ts` files
 - [ ] If two parallel implementations exist (`payment/` vs `old_payment_screen/`, etc.), the live one was edited.
 - [ ] If the change adds a stored procedure, it is marked `[migration-debt]` in `STORED_PROCEDURES.md` so the PG migration knows to convert it.
 - [ ] Tests added or updated for the changed behavior. If skipped, a one-line reason is in the PR description.
+- [ ] **If the change is migration work** (touches `docs/database/postgres-*`, an `IRoutineExecutor`/`IDatabaseDialect` boundary, an SP retirement, or PG provider code), the PR includes characterization tests captured against SQL Server *first* — or references the commit that already landed them. New tests written only against PG do NOT satisfy this gate. See [migration plan §"Characterization-First TDD Migration Gate"](../database/sql-server-to-postgres-migration-plan.md).

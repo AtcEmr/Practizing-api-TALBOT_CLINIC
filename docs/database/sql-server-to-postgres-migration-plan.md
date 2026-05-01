@@ -31,6 +31,72 @@ Recommended end-state:
 - Remaining database functions are limited to simple read-model helpers where database execution is clearly beneficial.
 - Stored procedure names should no longer be stored as executable configuration in business tables.
 
+## Characterization-First TDD Migration Gate
+
+> This is the most important principle in this plan. Read it before anything else. It overrides individual phase choices and effort estimates if there is a conflict.
+
+The migration is not a "rewrite then test" project. It is a **characterization-first** project: SQL Server's current behavior is the source of truth, captured in tests, and PostgreSQL is required to match those tests before any cutover. Code coverage is a secondary metric; business-output parity is the release gate.
+
+### The principle, stated plainly
+
+1. **SQL Server is the contract.** Whatever the production SQL Server returns *today* — for a given input, on a given dataset — is by definition correct. Regardless of bugs, stylistic ugliness, or future-state intent, parity to current SQL Server output is what passes the gate.
+2. **Capture the contract before changing anything.** For every migration slice (one workflow, one report, one scrub, one SP, one EDI shape), write or capture characterization tests against the **SQL Server** path first. Land those tests on `main` before any PostgreSQL work for that slice begins.
+3. **The same tests must run unchanged against PostgreSQL.** Repository-contract tests, integration tests, and golden-master comparisons that pass on SQL Server are run again, byte-for-byte unchanged, against the PostgreSQL implementation. Adapting the test to "make PG pass" is a fail.
+4. **PostgreSQL cannot cut over until every characterization test passes.** Per-slice gating: the report, scrub, or workflow stays on SQL Server until its tests are green on PG. The pilot tenant cannot move until every cutover-critical slice is green.
+5. **Code coverage is a secondary metric.** The team's 80% line coverage goal still matters for ongoing development discipline. It is not the migration release gate. The gate is **business parity**: do reports, charges, payments, claims, denials, statements, and EDI files match — to the cent and to the byte where applicable — between the two systems on the same inputs?
+6. **Intentional behavior changes are written down.** If a SQL Server bug must be preserved, document it as "preserved bug" in the migration decision log with the bug ID. If a SQL Server behavior must change in PG, the change is approved in writing **before** the test is updated, never after the test fails.
+
+### Required golden-master fixtures
+
+Each fixture is a captured set of inputs + the SQL Server outputs that PG must reproduce. Build these in Phase 1; they gate every subsequent phase. **Do not skip any of these.** A missing fixture is a missing test, which is an unguarded migration slice.
+
+| Domain | Fixture content | Owns the gate |
+|---|---|---|
+| **Reports** | For every active `PZ_Report` row: 3+ representative parameter sets per report, capture full result-set rows. | postgres-sp-conversion `Status=dual-run validated` for the SP. |
+| **Scrubs** | For every active `Scrub` row: 1 batch that passes the rule + 1 batch that fails it + 1 mixed batch. Capture the `ScrubError` rows produced. | postgres-sp-conversion gating for each `usp_RunScrub*`. |
+| **Stored procedures generally** | Per-SP: 2-3 input rows, full output result set. Use `sp_helptext` + production-shape sample data. | postgres-sp-conversion. |
+| **EDI 837 (outbound)** | A corpus of 50+ representative claims (different payers, modifier mixes, place-of-service). For each: the exact 837 bytes SQL Server-built `ClaimService` produces. | EDI workstream gate (see §"EDI Pipeline"). |
+| **EDI 835 (inbound)** | A corpus of 50+ representative ERAs (paid, partially-paid, denied, with adjustments). For each: the rows written into `Payment`, `PaymentAdjustment`, `PaymentCharge`, `ERARoot` after posting. | EDI workstream gate. |
+| **Payments** | A scenario battery: manual payment, ERA payment, write-off, reversal, refund, takeback. For each: the row sets across `Payment`, `PaymentAdjustment`, `Charge.Balance`, `Voucher`. | Phase 6c (Denial) + Phase 6d (Plaid/Chase). |
+| **Denials** | Aging-bucket counts, top-5 by company-type / company / adjustment, charge drill-down. Per filter combination, captured rows. | Phase 6c. |
+| **Aging** | `rpt_Aging_*` family: per cutoff date, full result. `usp_GetPatientAgingBalances` and the batch-statement variant. | Phase 6b. |
+| **Statements** | `rpt_PatientChargeStatement` + the XML variant + the auto-statement selector (`usp_GetPatientForAutoStatment`): per patient cohort, captured outputs. | Phase 6b. |
+| **Multi-tenant boundary** | For each per-practice table touched in any other fixture: a "different practice's row should be invisible" assertion. Catches missing `PracticeId` filters that otherwise leak data on cutover. | All phases. |
+
+Fixtures are stored under [postgres/validation/](./postgres/) once that folder gets populated. Until then, capture them locally in JSON/CSV under a `fixtures/` subfolder of the relevant test project, and commit. **Do not delete a fixture once captured** — drift between captures is itself a finding.
+
+### What this means in practice for each phase
+
+| Phase | Characterization-first impact |
+|---|---|
+| **Phase 1 (baseline)** | Cannot exit until the fixture set above is captured and tests are green on SQL Server. This is the largest single deliverable of Phase 1, larger than the build/runtime upgrade. |
+| **Phase 2 (boundary)** | Wraps SQL Server with `IRoutineExecutor` etc.; existing SQL Server fixtures must continue passing through the wrapper. |
+| **Phase 3 (PG schema)** | No tests change. PG schema must accept the same inputs that produced the SQL Server fixtures. |
+| **Phase 4 (data load)** | Fixture inputs replayed against PG; outputs compared. Money-totals and FK validators run. |
+| **Phase 5 (SP classification)** | For each SP, the fixture set determines whether the SP can be retired (C# replacement passes the same fixture) or temporarily ported (PG function passes the same fixture). |
+| **Phase 6 (SP retirement)** | Each retirement PR includes: (a) the existing fixture passes against the new C# / PG code, (b) the SP's row in `postgres-sp-conversion.md` updates to `replacement implemented`. The PR cannot merge if (a) regresses. |
+| **Phase 9 (dual-run)** | Pilot-tenant production traffic feeds both DBs; same fixtures plus daily live-data comparison. Trigger-noise is the only acceptable diff class. |
+| **Phase 10 (cutover)** | The cutover decision is "all fixtures green on PG, plus N days of dual-run with zero unexplained diffs," not "we think we're ready." |
+
+### Anti-patterns this principle exists to prevent
+
+- **"Ship the PG slice with new tests."** New tests written *during* the PG implementation only prove the PG implementation matches the new tests. They do not prove parity with SQL Server. Every test in a migration PR must have been written or captured against SQL Server first.
+- **"Adapt the test to make PG pass."** If the test compares SQL Server output bytes to PG output and they diverge, that is a finding, not a test bug. The fix is on the PG side, or the divergence is documented as approved.
+- **"We have 80% coverage, ship it."** Coverage of code paths is unrelated to coverage of business inputs. A migration can be 100% line-covered and still corrupt money totals on edge cases that the fixtures didn't capture. Inputs matter more than lines.
+- **"The SQL Server SP has a bug, fix it in PG."** Migration is not a refactor window. Preserve the bug, file it for v1.1. Combining migration with bug fixes makes parity comparison impossible.
+- **"We don't have a fixture for this report yet, but we'll add one."** No fixture means no migration of that slice. The fixture-build is the gate, not a parallel task.
+
+### How this connects to the framework
+
+- Use `/coverage-plan` (in this repo's `.claude/commands/`) before each migration slice to draft the test list. The coverage planner has a "characterization-first" mode triggered by migration-context queries.
+- Use the `write-tests` skill to author the captured tests, paying attention to its Step 0 about not extending the legacy `PractiZing.UnitTest.*` projects.
+- Use `/safety-review` before merging any migration PR. The pre-merge checklist now includes "characterization tests captured against SQL Server first" as a P0 gate.
+- The [postgres-sp-conversion.md](./postgres-sp-conversion.md) `Status` field cannot move to `dual-run validated` without a referenced fixture+test commit.
+
+### Why this is a principle, not a phase
+
+Migration phases are sequenced. This principle applies to every phase, every PR, every commit, every agent. It is the difference between "we shipped PG" and "we shipped PG and the books still balance."
+
 ## Stack Decisions (Phase 0 prerequisites)
 
 The original plan correctly says "stabilize first" but leaves several foundational decisions open. Each one cascades into a half-dozen downstream choices and rules out specific tooling paths. They must be made before any phase work begins; deferring them stalls the project.

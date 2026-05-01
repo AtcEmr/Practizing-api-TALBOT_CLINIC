@@ -13,6 +13,18 @@ description: Writes tests for changed code in the Practizing API or UI. Use when
 - After `/coverage-plan` produced a P0 list and the user wants to act on it.
 - Before merging a non-trivial change without tests.
 
+## Characterization-first mode (migration work)
+
+If the work is part of the SQL Server → PostgreSQL migration, this skill operates in **characterization-first mode**. Different rules apply:
+
+1. **SQL Server is the contract.** Tests are written or captured against the **current SQL Server behavior** before any PostgreSQL code is written for the slice. Whatever SQL Server returns is by definition correct, including bugs.
+2. **Capture, don't author.** For SP-backed paths, the most accurate test is one that records SQL Server's actual output for representative inputs and replays it as a fixture. The "test" is the `Assert.Equal(captured_output, actual)` after running the same call against PG.
+3. **The same test runs unchanged against PG.** A test you adapted to make PG pass is no longer a parity test. If output differs, the finding is on the PG side or the divergence is a documented decision.
+4. **Required fixtures** for any migration slice include reports (per active `PZ_Report` row), scrubs (pass + fail + mixed batch per active `Scrub` row), EDI 837 byte-for-byte, EDI 835 row-for-row, payment scenarios (manual / ERA / write-off / reversal / refund / takeback), denial dashboard outputs, aging cuts, statements, plus a multi-tenant "different practice's row should be invisible" assertion. Full list in the [migration plan's Characterization-First TDD Migration Gate](../../../docs/database/sql-server-to-postgres-migration-plan.md).
+5. **Coverage is secondary; parity is the gate.** Do not ship a migration PR with high line coverage but no business-parity fixture. The team's 80% coverage goal is a development-discipline metric, not the migration release gate.
+
+For non-migration work, the rest of this skill applies as written below.
+
 ## When NOT to use this skill
 
 - Adding tests for code outside the user's change scope. That's a separate "ratchet coverage" task.
