@@ -87,6 +87,23 @@ Compact tags in the per-SP table below:
 - `WRITE` — issues `INSERT`/`UPDATE`/`DELETE`. Side-effecting; needs golden-master tests, not just output diff.
 - `TRY` — has `TRY...CATCH`. PG uses `EXCEPTION` blocks; behavior differs.
 
+## Evidence columns (V3.2 addition)
+
+The per-SP table below has a `Status` column but earlier versions did not require evidence for status transitions. That made it possible to mark a row `validated` without proof. Status transitions now require evidence in these columns:
+
+| Column | What goes in it | When to fill |
+|---|---|---|
+| `Owner` | One named human responsible for migrating this SP. Not a team. | When `Status` first leaves `pending Phase 0`. |
+| `SQL Agent checked` | `yes` (with date) once `sql-agent-jobs.md` confirms whether this SP is called by any job. `no callers` if confirmed unused. | Phase 5. Cannot be `yes` until [sql-agent-jobs.md](./sql-agent-jobs.md) is populated. |
+| `Fixture commit` | Git hash of the commit that landed the characterization-test fixture against SQL Server. | Before `replacement implemented`. |
+| `Validation run` | URL or path to the dual-run comparison output that proved PG matches SQL Server for this SP. | Before `dual-run validated`. |
+| `Owner approval` | The owner's approval to cut over (PR review, email, signed-off-by, etc.). | Before `cutover`. |
+| `Cutover month-end` | The first month-end close after which the new path was the source of truth without rollback. | Before `dropped`. |
+
+A row that lacks any required-for-transition evidence cannot move to the next status. The `safety-reviewer` agent flags PRs that violate this rule.
+
+The columns are **not** added to the inline per-SP table below (that would make rows unreadable). Instead, the team maintains a parallel evidence file at [postgres/sp-evidence.md](./postgres/sp-evidence.md) (created when the first SP transitions out of `pending Phase 0`) with one row per SP and these six columns plus the SP name as the join key.
+
 ## Per-SP worksheet
 
 | SP | Modified | Lines | Category | Active dispatch | Risks | Recommended disposition | Status |

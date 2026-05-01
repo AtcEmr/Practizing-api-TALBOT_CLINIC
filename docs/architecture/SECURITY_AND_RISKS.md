@@ -8,6 +8,49 @@ Severity:
 - 🟡 **Medium** — fragile; future bugs likely.
 - ⚪ **Low** — code-quality smell.
 
+## Risk-tracking table
+
+This table converts the catalog into a backlog. Every row has a single named owner and a status. When a risk is fully fixed, mark it `RESOLVED` with the commit hash; do not delete the row (the audit trail matters).
+
+Status values: `OPEN` (not yet acted on), `IN PROGRESS` (active work), `MITIGATED` (partial fix in place; risk reduced but not eliminated), `RESOLVED` (verified gone), `ACCEPTED` (the team has decided to live with it indefinitely; documented).
+
+| # | Risk | Severity | Owner | Status | Planned fix phase | Issue / commit |
+|--:|---|:-:|---|---|---|---|
+| 1 | `BaseRepository.ExecuteStoredProcedureAsync` is SQL-injectable | 🔴 | backend lead | OPEN | Phase 2 (`IRoutineExecutor` boundary) | — |
+| 2 | Permission filter is disabled | 🔴 | security | OPEN | Phase 0 security cleanup | — |
+| 3 | JWT signing secret is hardcoded | 🔴 | security | OPEN | Phase 0 | — |
+| 4 | Database credentials in `appsettings.Development.json` | 🔴 | backend lead | OPEN | Phase 0 (git-history rewrite) | — |
+| 5 | EMR credentials embedded in JWT claims | 🔴 | security | OPEN | Phase 0 | — |
+| 6 | `POST /api/ClaimBatch/scrub` is `[AllowAnonymous]` with caller-supplied SP name | 🔴 | backend lead | OPEN | Phase 0 (P0 fix; remove `AllowAnonymous`, replace `spName` with `scrubId` lookup) | — |
+| 7 | DB-dispatched SP names (`PZ_Report`, `Scrub`) | 🔴 | backend lead | OPEN | Phase 6 (replace executable SQL with stable keys) | — |
+| 8 | `Exception.Message` returned to clients | 🟠 | backend lead | OPEN | Phase 2 (base controller fix) | — |
+| 9 | `DateTime.Now` everywhere | 🟠 | backend lead | OPEN | rolling fix; CI warns on new uses | — |
+| 10 | `PracticeId` defaults to 1 if JWT claim missing | 🟠 | backend lead | OPEN | Phase 1 (paired with fail-closed test) | — |
+| 11 | `.GetAwaiter().GetResult()` blocks in async paths | 🟠 | backend lead | OPEN | Phase 1 (.NET 10 upgrade exposes deadlock risk; fix during migration) | — |
+| 12 | Excel exports / batch scrubs run in request thread | 🟠 | backend lead | OPEN | Phase 6d (move to background-job framework) | — |
+| 13 | UI subscriptions without unsubscribing | 🟠 | UI lead | OPEN | rolling; new components only | — |
+| 14 | UI `_rid` interceptor `=` vs `===` bug | 🟠 | UI lead | OPEN | when interceptor is next touched | — |
+| 15 | No correlation ID propagation | 🟡 | architecture | OPEN | post-migration observability project | — |
+| 16 | `Console.WriteLine` instead of `ILogger` | 🟡 | backend lead | OPEN | rolling; CI does not flag | — |
+| 17 | Static `_practiceCodes` list in `DataBaseContext` | 🟡 | backend lead | OPEN | Phase 7 (PG provider rewrite) | — |
+| 18 | No UI permission directive | 🟡 | UI lead | OPEN | post-migration security project | — |
+| 19 | `useHash: true` SPA routing | 🟡 | UI lead | ACCEPTED | n/a; backend nginx depends on this | n/a |
+| 20 | Two parallel implementations (`payment/` vs `old_payment_screen/`, `bulk-statement/` vs `bulk-statement11/`) | 🟡 | UI lead | OPEN | UI cleanup project (separate from migration) | — |
+| 21 | JWT "small token" stored in MemoryCache | 🟡 | backend lead | ACCEPTED | n/a; deploy windows planned around it | n/a |
+| 22 | Heavy commented code in production files | ⚪ | — | OPEN | rolling cleanup | — |
+| 23 | Loose typing in UI services (`Observable<any>`) | ⚪ | UI lead | OPEN | new code only | — |
+| 24 | Minimal test coverage | ⚪ | QA lead | IN PROGRESS | Phase 1 baseline + characterization fixtures | — |
+| 25 | Old framework versions (.NET Core 2.1, Angular 7) | ⚪ | architecture | IN PROGRESS | Phase 1 (.NET 10); Angular separate project | — |
+
+### Maintenance rules for this table
+
+- Update the row in the same PR that takes action on the risk. Don't batch.
+- If a risk gets a partial fix, status becomes `MITIGATED` and the row notes what remains.
+- If you discover a new risk, append it as #26+ — do not renumber existing entries (those numbers are referenced from other docs).
+- If the team formally decides to live with a risk, change status to `ACCEPTED` and add a sentence explaining the trade-off. `ACCEPTED` is not "we forgot."
+
+The detailed write-ups for each risk follow below.
+
 ## 🔴 Critical
 
 ### 1. `BaseRepository.ExecuteStoredProcedureAsync` is SQL-injectable

@@ -108,6 +108,7 @@ Specialist agents that investigate without editing. Use them via slash commands 
 | `safety-reviewer` ([.claude/agents/safety-reviewer.md](.claude/agents/safety-reviewer.md)) | You're about to merge a non-trivial change. Default scope covers committed + staged + unstaged + untracked. |
 | `db-introspector` ([.claude/agents/db-introspector.md](.claude/agents/db-introspector.md)) | You need actual DB state — table columns, SP body, dependency lookup. Read-only. |
 | `test-coverage-planner` ([.claude/agents/test-coverage-planner.md](.claude/agents/test-coverage-planner.md)) | You're about to merge code without tests, or want to plan what to test for a feature. |
+| `catalog-sync-validator` ([.claude/agents/catalog-sync-validator.md](.claude/agents/catalog-sync-validator.md)) | Detects drift between catalog docs (`STORED_PROCEDURES.md`, postgres-sp-conversion, postgres-schema-conversion) and the live DB. Run monthly during steady state, weekly during migration phases. |
 
 For agents other than Claude (Codex, Gemini): the subagent files are plain Markdown with YAML frontmatter. The frontmatter `description` and the body's "Method" + "Output shape" sections are the contract. You can adapt them to your own runner format.
 
@@ -124,6 +125,8 @@ Step-by-step playbooks with built-in guardrails. Each skill names the convention
 | [`add-scrub`](.claude/skills/add-scrub/SKILL.md) | Add a claim-scrub rule. Today every scrub row runs as a SQL Server stored procedure (the C# validator path is documented but unimplemented in current code). |
 | [`add-admin-screen`](.claude/skills/add-admin-screen/SKILL.md) | Add a master-data list+detail screen in the root admin Angular app. |
 | [`write-tests`](.claude/skills/write-tests/SKILL.md) | Author tests after `/coverage-plan` produces a P0 list. Picks the right layer (unit / repository contract / API integration / golden-master / UI) and follows the codebase's existing patterns. |
+| [`remove-endpoint`](.claude/skills/remove-endpoint/SKILL.md) | Retire an existing API endpoint cleanly across every dispatch surface. Refuses if UI callers still depend on it. |
+| [`deprecate-feature`](.claude/skills/deprecate-feature/SKILL.md) | Mark a feature/endpoint/report/scrub for removal with a planned cutover date. Adds the deprecation banner, registers the date in `MIGRATION_DECISIONS.md`, and primes `remove-endpoint` for the cutover day. |
 
 Skills are deliberately opinionated. They reflect this codebase's conventions, not generic .NET / Angular advice. If your task doesn't match a skill, follow the closest [recipe in RECIPES.md](docs/conventions/RECIPES.md).
 
@@ -140,6 +143,7 @@ User-typed shortcuts that dispatch to subagents. Open the file under `.claude/co
 | `/safety-review [staged\|committed]` | Runs the pre-merge checklist. Default covers committed + staged + unstaged + untracked. |
 | `/db-query <question>` | Read-only query against the live DB. |
 | `/coverage-plan [feature]` | Plans tests for the current change set or a named feature. Returns prioritized P0/P1/P2 list. |
+| `/validate-catalog [sps\|tables\|dispatch]` | Detects drift between catalog docs and live DB. Read-only. |
 
 ---
 

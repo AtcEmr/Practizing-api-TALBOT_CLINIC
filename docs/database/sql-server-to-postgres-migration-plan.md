@@ -204,6 +204,81 @@ What you must validate in custom C# (cannot rely on pgloader):
 5. **Row counts per table** — necessary but not sufficient.
 6. **Trigger-fired audit row reconciliation** — see "Trigger Migration Strategy" below.
 
+### Phase 0 hard gates added in V3.2
+
+These gates were missing from earlier versions; closing them is a precondition for Phase 1, not deferrable to Phase 5.
+
+#### Managed PostgreSQL provider + BAA
+
+**Decision required.** Pick the PostgreSQL hosting provider and execute the Business Associate Agreement (BAA) **before** any PHI moves. Without a signed BAA, no PHI can land in the new system, full stop. HIPAA-eligible options today: AWS RDS for PostgreSQL, Azure Database for PostgreSQL, GCP Cloud SQL, Aiven (with HIPAA addendum), Crunchy Data managed PG. Self-hosted is also valid if the team has DBA capacity.
+
+Owner: Ops + Compliance. Deadline: end of Phase 0. Tracked in [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md).
+
+#### Background-job framework
+
+**Decision required.** Several SP retirements (snapshots, ETL, payment-warehouse refresh, statement generation) move to "background jobs." The framework is currently unspecified. Pick one before Phase 6: Hangfire (most common in .NET, Postgres-compatible), Quartz.NET (heavier, more configurable), Coolify-managed cron (simplest, no app dependency), `IHostedService` per service (lightest), or external scheduler (AWS EventBridge, Azure Logic Apps).
+
+Owner: Backend lead. Deadline: end of Phase 0. Affects Phase 6d sizing.
+
+#### SQL Agent job inventory
+
+**This was previously deferred to Phase 5 — now a Phase 0/1 hard gate.** SQL Agent is the only place "scheduled work runs" today (per [CLAUDE.md](../../CLAUDE.md)). Without an exhaustive inventory, every "background job" disposition in the SP worksheet is fiction.
+
+Required deliverable, due end of Phase 1: [sql-agent-jobs.md](./sql-agent-jobs.md) — populated from `msdb.dbo.sysjobs` + `sysjobsteps` + `sysschedules` + `sysjobhistory`. One row per job with: name, schedule, last successful run, command (often `EXEC usp_X`), referenced SPs, owner, disposition (port to background-job framework / one-shot SQL during cutover / drop). The SP worksheet's `SQL Agent checked` evidence column cannot be marked `yes` for any SP until this inventory exists.
+
+Query to start with:
+```sql
+SELECT j.name, j.enabled, s.step_name, s.subsystem, s.command,
+       sch.name AS schedule_name, sch.freq_type, sch.freq_interval
+FROM msdb.dbo.sysjobs j
+LEFT JOIN msdb.dbo.sysjobsteps s ON s.job_id = j.job_id
+LEFT JOIN msdb.dbo.sysjobschedules js ON js.job_id = j.job_id
+LEFT JOIN msdb.dbo.sysschedules sch ON sch.schedule_id = js.schedule_id
+WHERE j.enabled = 1
+ORDER BY j.name, s.step_id;
+```
+
+Owner: DBA. Deadline: end of Phase 1.
+
+#### Performance baseline capture
+
+**Required Phase 1 deliverable.** Capture SQL Server p95/p99 latency for the critical workflows below, on representative data. Without these baselines, Phase 8 has no acceptance criterion — the team will tune forever.
+
+| Workflow | Tool | Acceptance criterion for PG |
+|---|---|---|
+| Top 10 most-used reports (from `PZ_Report` usage logs) | Query plan + 5 runs averaged | PG p95 ≤ SQL Server p95 × 1.20 |
+| Active scrub batch on a 200-charge claim batch | Wall-clock + per-rule | PG ≤ SQL Server × 1.15 |
+| Patient search (typical filter combos) | API timing | PG p95 ≤ SQL Server p95 |
+| Charge entry (POST `/api/Charge`) | API timing | PG p95 ≤ SQL Server p95 × 1.10 |
+| Payment posting (typical batch) | API timing | PG p95 ≤ SQL Server p95 × 1.10 |
+| 837 generation per claim batch | Wall-clock | PG ≤ SQL Server × 1.10 |
+| 835 import per ERA file | Wall-clock | PG ≤ SQL Server × 1.10 |
+| Denial dashboard load | API timing | PG p95 ≤ SQL Server p95 |
+
+Capture in `postgres/validation/performance-baseline.md`. Re-run during Phase 8 and Phase 9 against PG; record deltas.
+
+#### Fail-closed multi-tenant acceptance test
+
+**Required Phase 1 deliverable, blocks Phase 4.** Today, [`DataBaseContext.cs:88`](../../Common/PractiZing.DataAccess.Common/DataBaseContext.cs) derives the practice code from the request `Origin`/`Host` header. The JWT carries an independent `PracticeId`. There is no allowlist registry; there is no cross-check.
+
+The migration target (schema-per-practice + allowlisted registry) requires a **fail-closed test** that exercises every disagreement path:
+
+```
+Test matrix — every row must result in 403 (NOT a routed-to-default-practice request):
+
+Host header → PracticeCode  | JWT PracticeId | Registry says   | PG schema  | Expected
+"talbot.app.com" → "talbot" | 5  (Talbot)    | "talbot"→5      | practice_5 | 200 OK
+"talbot.app.com" → "talbot" | 5  (Talbot)    | "talbot"→5      | (missing)  | 503  Service-Unavailable, NOT silent fall-back
+"unknown.app"   → "unknown" | (any)          | not in registry | (any)      | 403  Forbidden
+"talbot.app.com" → "talbot" | 7  (Other)     | "talbot"→5      | (any)      | 403  cross-tenant attempt
+"talbot.app.com" → "talbot" | (none)         | "talbot"→5      | (any)      | 401  no PracticeId claim
+(no Host)                   | 5  (Talbot)    | (any)           | (any)      | 400  request rejected
+```
+
+Implement against the `IDatabaseConnectionFactory` boundary (Phase 2). Land before Phase 4 schema/data work begins. **A row that produces "silently routed to wrong practice" is a P0 bug, not a test failure to triage.**
+
+This test exists today neither in `PractiZing.UnitTest.Common` nor `PractiZing.UnitTest.DenialService`; both projects are legacy (see Phase 1 test-harness note below) and must not be extended. Land it in a new `PractiZing.Tests.MultiTenantBoundary` project.
+
 ### Phase 0 security cleanup (mandatory before any migration work)
 
 The current codebase has secrets that will be carried into migration artifacts unless cleaned up first. This is not optional and not deferrable.
@@ -257,8 +332,8 @@ Pilot duration: use 8-10 weeks if requiring two month-end closes. Four weeks is 
 | Multi-tenant routing | `Common/PractiZing.DataAccess.Common/DataBaseContext.cs` derives practice code from request origin and opens a named OrmLite connection. | Decide whether each practice becomes a separate PostgreSQL database, a separate schema, or a tenant key inside shared tables. |
 | Direct SQL Server ADO.NET | 15 C# files use `System.Data.SqlClient`, `SqlConnection`, `SqlCommand`, `SqlDataAdapter`, `SqlParameter`, or `SqlDbType`. | These calls must move to provider-neutral abstractions or to Npgsql-specific implementations. |
 | Generic procedure helper | `Common/PractiZing.BusinessLogic.Common/BaseRepository.cs` builds `exec {functionName} {params}` strings. | This is SQL Server-specific and unsafe. PostgreSQL needs parameterized `select * from function(...)`, `call`, or application-side query handlers. |
-| Stored procedure calls | 23 `ExecuteStoredProcedureAsync` call sites were found in code. | Each call needs a migration disposition: retire, port, or replace with query service. |
-| Direct `CommandType.StoredProcedure` | 7 direct `CommandType.StoredProcedure` usages were found. | PostgreSQL functions/procedures do not behave like SQL Server stored procedures. Result handling must be redesigned. |
+| Stored procedure calls | **11 files** (verified 2026-04-30) contain `ExecuteStoredProcedureAsync` calls; total call-site count is higher (multiple per file). Each call site needs a migration disposition. | Counts in earlier drafts (23) included call counts not file counts. Authoritative: re-run grep at start of Phase 5. |
+| Direct `CommandType.StoredProcedure` | **5 files** (verified 2026-04-30) use raw `SqlCommand` with `CommandType.StoredProcedure`. Files: `ClaimBatchRepository`, `ChargesRepository`, `PaymentRepository`, `DynmoPaymentsRepository`, generated dataset code. | PostgreSQL functions/procedures do not behave like SQL Server stored procedures. Result handling must be redesigned. |
 | Report execution | `ReportRepository` executes command text from `dbo.PZ_Report.Command` via `SqlCommand.CommandText`. | Reports are data-driven SQL. These commands must be converted to parameterized report definitions or report query services. |
 | Scrub execution | `ClaimBatchRepository.RunAutoScrub` accepts a procedure name and passes a SQL Server table-valued parameter to a stored procedure. | This is one of the highest-risk migration areas. It should become a scrub rule engine or a PostgreSQL-specific rule executor. |
 | Raw SQL strings | At least 191 raw SQL indicators were found. Some are comments or false positives, but there are real examples using `SELECT`, `TOP`, `exec`, string concatenation, and SQL Server table names. | Raw SQL must be inventoried, parameterized, and converted to PostgreSQL syntax. |
@@ -468,6 +543,31 @@ The original plan covers stored-procedure scrubs and reports but does not name E
 5. Cutover for EDI is part of the tenant pilot — do not flip 837 generation to PG until the pilot has produced a full week of clean claim files.
 
 **EDI is a higher-risk workstream than reports** because there is an external partner (the clearinghouse) who will not tolerate malformed files. Reports are internal; an off-by-one row count is a bug we can fix. A malformed 837 is a rejected claim batch and revenue impact.
+
+**Byte-parity diffing rules.** A naive `cmp` between two 837 files always shows differences because several fields are intentionally dynamic. Without masking, every diff is a false positive and the gate is useless. Mask these fields before comparison:
+
+| Field | Where | Why mask |
+|---|---|---|
+| Interchange Control Number | `ISA13` (positions 90-98 of ISA segment) | Increments per envelope; never byte-equal between two runs. |
+| Group Control Number | `GS06` | Same reason. |
+| Transaction Set Control Number | `ST02` | Same reason. |
+| Interchange Date / Time | `ISA09`, `ISA10` | Wall-clock dependent. |
+| Group Date / Time | `GS04`, `GS05` | Same reason. |
+| BHT03 (claim batch reference) | BHT segment | Generated per run. |
+| File-creation timestamp in TRN segments | TRN02 | Per-run. |
+| Line endings | Whole-file | SQL Server may emit `\r\n`; PG path may emit `\n`. Normalize before diff. |
+
+Mask by replacing each field with a fixed marker (`{{ISA13}}`) before diffing. The masked-equal-bytes assertion is the gate; differences in any other field are real findings. Tooling: extend `EdiFabric` parsing to emit a "stable canonical form" of each 837/835 for diffing.
+
+**ISA/GS/ST envelope sanity checks** that should pass independently of byte parity:
+- Segment terminator consistent (`~` per spec).
+- Element separator consistent (`*`).
+- Sub-element separator consistent (`:`).
+- Envelope segment count (IEA01) matches actual GS count.
+- Group segment count (GE01) matches actual ST count.
+- Claim count in BHT04 matches actual CLM segments.
+
+**Payer-specific formatting.** Some clearinghouses or payers reject 837 files for whitespace, segment ordering, or optional-field-presence differences that fall outside HIPAA spec. Maintain a per-payer comparison checklist in `postgres/validation/edi-payer-rules.md` so the team knows when a "spec-compliant difference" is also a "payer-incompatible difference."
 
 ### Trigger Migration Strategy
 
@@ -834,7 +934,7 @@ public interface IQueryExecutor
 // and route through the dialect for any provider-sensitive syntax.
 ```
 
-**No code outside this interface may call `new SqlConnection(...)` or `new NpgsqlConnection(...)`.** A grep-based CI rule enforces this. There are 15 SqlClient files today; after Phase 1.5 (consolidation) there should be zero direct uses outside this implementation.
+**No code outside this interface may call `new SqlConnection(...)` or `new NpgsqlConnection(...)`.** A grep-based CI rule enforces this. SqlClient sprawl in the current codebase: ~15 files (grep `using System.Data.SqlClient` plus `using Microsoft.Data.SqlClient`). After Phase 1.5 (consolidation), there should be zero direct uses outside this implementation. Re-verify the count at start of Phase 1.5; treat it as a measurable gate, not a fixed number.
 
 #### `IRoutineExecutor`
 Replaces `BaseRepository.ExecuteStoredProcedureAsync`. Routes calls to the right dialect's procedure-call mechanism.
@@ -1005,6 +1105,25 @@ Rules:
 - Do not retire a stored procedure until its replacement has golden-master output tests.
 
 ### Phase 1: Stabilize Build and Test Baseline
+
+**New in V3.2: legacy test projects are not a credible baseline. Do not extend them.**
+
+Existing API test projects (`Common/PractiZing.UnitTest.Common/` and `DenialManagementService/PractiZing.UnitTest.DenialService/`) cannot serve as the migration baseline. Specifics:
+- `DependencyResolverTest.DBConnection()` ([file:line 23](../../Common/PractiZing.UnitTest.Common/DependencyResolverTest.cs)) hardcodes a developer's local SQL Server credentials (`DESKTOP-PBHUBDF\SA`, `sa/sa$123`) and an expired ServiceStack license, then **returns `null`** at line 28.
+- The fixture cannot run on CI or against the team DB without rewriting it.
+- The class is referenced by other tests, so any extension imports the broken connection.
+
+Phase 1 deliverables MUST include creating new test projects, not extending the legacy ones:
+- `PractiZing.Tests.MultiTenantBoundary` — for the fail-closed acceptance test (see Phase 0 §"Fail-closed multi-tenant acceptance test").
+- `PractiZing.Tests.Characterization` — for the golden-master fixtures listed in §"Characterization-First TDD Migration Gate".
+- One `*.Tests.{Service}` per service project as needed (e.g. `PractiZing.Tests.ChargePaymentService`).
+
+Each new test project follows the patterns in [.claude/skills/write-tests/SKILL.md](../../.claude/skills/write-tests/SKILL.md):
+- DB connection from env var (`Configuration["TestDatabase:ConnectionString"]`), never hardcoded.
+- Real DB integration over mocks (the migration plan's parity demands real-DB tests).
+- Per-test transaction rollback so tests don't leak state.
+
+The legacy projects stay in the repo for reference but are flagged `[legacy]` in their `.csproj`'s `<Description>` and are not run in CI past Phase 1 completion.
 
 Current blocker:
 
@@ -1402,6 +1521,24 @@ PostgreSQL index opportunities:
 
 ### Phase 9: Dual-Run Validation
 
+**Diff-validation job specification (V3.2 addition).** Earlier drafts said "compare outputs" without specifying how. Without a concrete job design, dual-run produces noise nobody triages. Pin these decisions before the pilot starts:
+
+| Decision | Recommendation | Rationale |
+|---|---|---|
+| Architecture | **Scheduled batch** (hourly during pilot, daily post-pilot). NOT inline streaming. | Streaming doubles request latency; batch is good enough at pilot volumes. |
+| Diff scope | (a) Per-table row counts daily; (b) money-totals (Charge/Payment/PaymentAdjustment/Voucher/Invoice/ChargeBatch/PaymentBatch) hourly; (c) full row-by-row hash for tables modified in the last hour, sample-based for stable tables. | Money totals are the financial-correctness gate; row hashes catch silent data drift. |
+| Audit-timestamp exclusion | `CreatedDate`, `ModifiedDate`, `_History` table timestamps are masked before comparison. | These will always differ between two systems; without masking, the job emits 100% noise. |
+| Output format | JSONL appended to `dual-run-diff-YYYYMMDD.log` per day, plus a daily summary row in a `DiffJobRuns` table on the PG side. | JSONL is greppable; the summary table is dashboardable. |
+| Storage | Logs to `/var/log/practizing/diffs/` (rotated weekly), summary table retained 90 days. | Compliance-friendly; tracker can audit the trail. |
+| Alert thresholds | Money diff > $0.01 on any table → page on-call immediately. Row-count diff > 0.1% → daily-digest alert. Hash diff on any modified row → daily-digest with row id. | $0.01 is the financial gate; 0.1% absorbs trigger-noise. |
+| Triage SLA | P0 (money diff) → 1 hour; P1 (row hash) → 24 hours; P2 (count drift) → next business day. | Realistic for a 4-5 person team. |
+| Owner | One named engineer + the migration lead as backup. | Without an owner, diffs accumulate. |
+| Dashboard | Grafana panel showing diff counts by category over time + a "current open diffs" list. | Visibility makes triage routine instead of heroic. |
+
+The job lives in a new `PractiZing.Migration.DiffValidator` console app, deployed alongside the API services in Coolify. Its runbook is `postgres/runbooks/diff-validation-runbook.md`.
+
+**Trigger-noise warning (read first):** the 221 audit/cascading triggers (see "Trigger Migration Strategy" earlier) will produce diffs in audit timestamps and possibly in cascaded state columns even when the underlying business data is correct. Phase 9 validation logic must classify each diff:
+
 **Trigger-noise warning (read first):** the 221 audit/cascading triggers (see "Trigger Migration Strategy" earlier) will produce diffs in audit timestamps and possibly in cascaded state columns even when the underlying business data is correct. Phase 9 validation logic must classify each diff:
 
 - **Acceptable diff** — audit-timestamp-only, known cascading-state column the team has documented.
@@ -1449,6 +1586,24 @@ Golden-master comparisons:
 - EDI file generation inputs.
 
 ### Phase 10: Production Cutover
+
+**Cutover ownership and rollback semantics (V3.2 addition).** Decisions earlier drafts left implicit; pin before cutover:
+
+| Decision | Required answer (commit one in writing in [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md)) |
+|---|---|
+| **Cutover model** | (a) Hard cutover with maintenance window — write-freeze on SQL Server, sync delta, flip routing. Acceptable downtime: 2-6 hours during off-hours. **OR** (b) CDC-based zero-downtime — logical replication keeps PG synced; flip per-tenant. Acceptable downtime: zero, but operational complexity is much higher. **Default recommendation: hard cutover for the pilot tenant; CDC for the broader rollout if the pilot exposes acceptance for downtime.** |
+| **Source of truth during pilot** | SQL Server is the source of truth for the **pilot tenant** until the dual-run validation gate passes for ≥ N consecutive days. PG-only writes start only after that gate. Pick N (recommend 14 days, including ≥1 month-end close). |
+| **Reverse-sync policy** | If the pilot tenant has any PG-only writes, those writes are **NOT** propagated back to SQL Server. Rolling back means accepting data loss for the pilot tenant from cutover-time onward. Decide before the pilot: is the practice OK with this? Document the consent. |
+| **Reconciliation for in-flight transactions** | Define what "in-flight" means at cutover-instant: claims submitted but not yet acknowledged, payments posted but not yet committed, ERAs in the SFTP retrieval window, statements queued for delivery. For each, name the post-cutover reconciliation script and its owner. |
+| **Cutover RPO** | The acceptable data loss window if cutover fails. For hard cutover: equal to the write-freeze window. For CDC: equal to the replication lag at cutover-instant (typically < 5 seconds). |
+| **Cutover RTO** | Time to restore service after a failed cutover. Recommend ≤ 30 minutes — that means the rollback procedure is rehearsed and the SQL Server connection string is one config-flip away. |
+| **Incident commander** | One named human who has authority to call "abort cutover" mid-window. Not a committee. Chain of command if they're unreachable. |
+
+**Rollback rule (made explicit):** if any writes occur on PG after cutover-instant, rolling back to SQL Server requires either:
+1. Reverse-replication infrastructure to ship those writes back (not free; design upfront in the CDC model).
+2. **Accepting data loss** for the rollback period.
+
+This decision is binary and must be made BEFORE cutover, not during the incident. The default is "we accept the loss for the pilot tenant only; broader-rollout cutover is gated on pilot-confirmed clean PG operation." Other practices do not move until pilot is post-rollback-window stable.
 
 Cutover plan must be written and rehearsed.
 
@@ -1740,6 +1895,39 @@ The plan recommends retiring stored procedures into application services. That r
 
 **Apply the rewrite trigger list during Phase 5 classification.** Procedures matching only the "quality signals" without a real rewrite trigger should be marked "translate, don't rewrite."
 
+## Budget and Resource Planning
+
+The effort estimation below is in calendar weeks. Leadership funding the project will also need rough dollar ranges. These are **planning-grade**, not contractual; refine after Phase 0 closes.
+
+### Engineering cost (largest single line)
+
+Assuming a 4-5 FTE team (1 backend lead, 2 backend, 1 DBA, 1 QA) plus a 25% product owner, sustained for 13-18 months:
+- Loaded cost per FTE: $150-220k (US contractor) / $130-180k (US permanent) / less in non-US locations.
+- Team-months: 4-5 FTE × 13-18 months = ~60-90 team-months for the whole migration; ~40-55 to pilot cutover.
+- **Range: $700k - $1.5M** for the full migration depending on geography and full-vs-half-time staffing.
+
+### Vendor and infrastructure cost
+
+| Line item | Estimate | Notes |
+|---|---|---|
+| Managed PostgreSQL service (HIPAA-eligible tier) | $1.5k - $5k / month during dual-run; $1k - $3k / month steady-state | AWS RDS / Azure / Aiven pricing for ~500GB DB with read replica. |
+| EdiFabric license upgrade | $5k - $25k one-time, depending on SKU | Confirm with vendor. The current license may not cover .NET 10. |
+| ServiceStack OrmLite PostgreSQL provider | $0 - $5k one-time, depending on bundle | Verify before Phase 1. |
+| pgloader infrastructure | $0 (open source) | Run on a one-off VM during data-migration prototype. |
+| Observability (Grafana / Datadog / equivalent) | $500 - $2k / month | If not already in stack. |
+| BAA fees | Usually $0 with reputable cloud DBs | Some providers charge; verify per vendor. |
+| **Dual-run total during pilot (8-10 weeks)** | $4k - $15k extra infra | Both SQL Server and PG running simultaneously. |
+
+### Risk reserve
+
+Recommend **+30% of total** for unknowns: vendor incompatibility, trigger-inventory surprises, EDI byte-parity regressions, pilot-tenant exit and replanning, compliance findings, performance-tuning iterations beyond Phase 8.
+
+### Bottom line for leadership
+
+A reasonable funding ask for the full migration: **$1.0M - $2.0M** (engineering + vendor + infra + reserve), spread across 13-18 months, with a Phase 0 spend (decisions + security cleanup + baseline + test harness) of ~$150-300k before any irreversible commitment.
+
+A "we'll just buy more SQL Server licenses for another year" alternative cost (the do-nothing baseline) should be priced separately by ops; the migration is justified against that baseline, not in absolute terms.
+
 ## Effort Estimation
 
 The original plan has no sizing. Without it, leadership cannot fund the project and engineering cannot commit timelines. Below are T-shirt sizes for one team of 4-5 engineers (1 backend lead, 2 backend, 1 DBA, 1 QA) plus a part-time product owner. Sizes assume the team is dedicated; halve them if the team is half-time.
@@ -1859,6 +2047,54 @@ These notes were added after Codex reviewed the V2 patch against the current rep
 5. **Scrub validator behavior must be described as target design, not current behavior.** The current API does not dispatch `CPTToICDValidator` or `CPTToModifierValidator` to C# classes; it executes `Scrub.StoredProcedure` as a SQL Server stored procedure.
 6. **SqlClient consolidation must inventory actual direct SP usage.** The current grep result is 15 SqlClient files and direct `CommandType.StoredProcedure` use in multiple non-scrub repositories. The exception list must be explicit.
 7. **`usp_GetDynmoPaymentsForCatalystRCM` is missing from the generated schema snapshot.** Re-check the live DB before Phase 5, but do not leave it as a vague casing question.
+
+### V3.2 — Joint Codex+Claude audit closure (Claude)
+
+After the framework was fully built and the Characterization-First TDD principle landed, both Claude and Codex ran independent ultra-deep audits to find what was still missed. This pass closes the high-impact gaps surfaced by both audits.
+
+**Phase 0 hard gates added** (previously deferred to Phase 5, now blocking):
+1. Managed PostgreSQL provider + BAA — pinned as Phase 0 decision.
+2. Background-job framework — pinned as Phase 0 decision (Hangfire/Quartz/cron/IHostedService/external).
+3. SQL Agent job inventory — `sql-agent-jobs.md` worksheet created; populated in Phase 1.
+4. Performance baseline capture — Phase 1 deliverable with explicit acceptance criteria per workflow.
+5. Fail-closed multi-tenant acceptance test — Phase 1 deliverable; blocks Phase 4. Includes the test matrix that proves Host/JWT/registry/schema disagreement results in 403, never silent routing.
+
+**Phase 1 deliverables clarified**:
+- Legacy test projects (`PractiZing.UnitTest.Common`, `PractiZing.UnitTest.DenialService`) are NOT extended. New `PractiZing.Tests.*` projects established. Connection strings come from env vars, never hardcoded.
+
+**Phase 9 specified concretely** (was previously hand-waved):
+- Diff-validation job: scheduled batch, hourly during pilot, money totals + row hashes + audit-timestamp masking, JSONL output, alert thresholds, owner+SLA, Grafana dashboard.
+
+**Phase 10 hardened**:
+- Cutover model decision (hard window vs CDC) with named recommendation.
+- Source-of-truth rule during pilot (SQL Server until N consecutive validation-clean days).
+- Reverse-sync policy (none for pilot tenant; data loss accepted on rollback, with practice consent).
+- In-flight transaction reconciliation script ownership.
+- Cutover RPO/RTO targets explicit.
+- Named incident commander, not a committee.
+
+**Cost & budget section added**:
+- Engineering, vendor (managed PG, EdiFabric, ServiceStack), infrastructure (dual-run cost), and risk reserve (+30%).
+- Bottom-line funding ask: $1.0M - $2.0M for the full migration, $150-300k for Phase 0.
+
+**EDI byte-parity made deterministic**:
+- Mask rules for `ISA13`, `GS06`, `ST02`, dates/times in envelope, BHT03, TRN02, and line endings before diff.
+- Envelope sanity checks (segment counts, terminator consistency).
+- Per-payer formatting checklist requirement.
+
+**SP-call-site counts corrected**:
+- Earlier text said "23 ExecuteStoredProcedureAsync" + "7 CommandType.StoredProcedure" + "15 SqlClient files." Re-grepped 2026-04-30: **11 files** with `ExecuteStoredProcedureAsync`, **5 files** with direct `CommandType.StoredProcedure`. Counts updated; gates are now phrased as "re-run grep at Phase 5 and 1.5" rather than fixed numbers.
+
+**Companion artifacts created in this pass**:
+- [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md) — structured decision log with required columns.
+- [sql-agent-jobs.md](./sql-agent-jobs.md) — SQL Agent inventory worksheet.
+- [.github/workflows/safety-review.yml](../../.github/workflows/safety-review.yml) — CI enforcement of the safety-review checklist.
+- [AGENTS.md](../../AGENTS.md) — non-Claude tool compatibility (Codex convention).
+- New subagent + slash command: catalog-sync-validator + `/validate-catalog` for drift detection.
+- New skills: `remove-endpoint`, `deprecate-feature` for lifecycle workflows.
+- SP worksheet evidence columns: `SQL Agent checked`, `fixture commit`, `validation run`, `owner approval`, `cutover month-end`.
+
+V3.2 closes the gaps identified jointly. The plan is now operational, not just architectural.
 
 ### V3.1 — Claude polish of V3 (Claude)
 

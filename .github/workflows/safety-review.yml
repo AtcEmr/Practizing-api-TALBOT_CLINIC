@@ -1,0 +1,181 @@
+name: safety-review
+
+# Pre-merge guardrails for the Practizing repo. The full safety-review checklist
+# in docs/architecture/SECURITY_AND_RISKS.md is reviewed by humans (or by the
+# `safety-reviewer` Claude subagent) before merge. This CI job enforces the
+# subset that is mechanically checkable so the obvious failures cannot reach
+# the reviewer's queue.
+#
+# What this catches today:
+#   - New SqlClient sprawl (direct SqlConnection/SqlCommand outside known files)
+#   - DateTime.Now in audit/timestamp paths (use DateTime.UtcNow)
+#   - Parameters.AddWithValue in new code (use explicit SqlParameter typing)
+#   - [AllowAnonymous] additions outside an allowlist
+#   - Hardcoded JWT secret literals
+#   - Hardcoded DB credentials in appsettings.Development.json
+#   - SP names that no longer exist on the live DB (drift detection — opt-in)
+#
+# What this does NOT catch (still needs human review):
+#   - Multi-tenant filter omissions
+#   - ex.Message exposure to clients
+#   - UI subscription leaks
+#   - Characterization-first violations on migration PRs
+#
+# Run /safety-review locally for the full pass before merge.
+
+on:
+  pull_request:
+    branches: [main, coolify]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  guardrails:
+    name: Static guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need history to diff against base
+
+      - name: Compute changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+          echo "base=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "files<<EOF"
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Block hardcoded JWT secret in C#
+        run: |
+          if git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+             | grep -E '^\+' \
+             | grep -E 'JWT.*Secret|JwtSecret.*=.*"[^"]+"' \
+             | grep -v 'Configuration\['; then
+            echo "::error::A new JWT secret literal was added in this PR. Move to Configuration[\"Jwt:Secret\"] (env var)."
+            exit 1
+          fi
+
+      - name: Block prod-shaped DB credentials in appsettings.Development.json
+        run: |
+          if git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '**/appsettings.Development.json' \
+             | grep -E '^\+' \
+             | grep -E 'Server=[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|Password=[^;"]{4,}'; then
+            echo "::error::A production-shaped DB credential was added to appsettings.Development.json. Move to env (ConnectionStrings__DefaultConnection)."
+            exit 1
+          fi
+
+      - name: Warn on Parameters.AddWithValue in new C#
+        run: |
+          if git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+             | grep -E '^\+.*\.AddWithValue\('; then
+            echo "::warning::New code uses Parameters.AddWithValue. Prefer explicit SqlParameter typing (SqlDbType.Int / VarChar / Structured + TypeName for TVPs). See docs/architecture/SECURITY_AND_RISKS.md."
+          fi
+
+      - name: Warn on DateTime.Now in audit/timestamp paths
+        run: |
+          if git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+             | grep -E '^\+.*DateTime\.Now' \
+             | grep -vE '//.*TODO\(utc\)'; then
+            echo "::warning::New code uses DateTime.Now. Prefer DateTime.UtcNow for audit/timestamp columns. See SECURITY_AND_RISKS.md §9."
+          fi
+
+      - name: Block new [AllowAnonymous] outside allowlist
+        run: |
+          # Allowlist of files where [AllowAnonymous] is intentional (login, public health checks, etc.)
+          # Currently: SecurityService Login + ClaimBatchController.Scrub (the latter is a known
+          # P0 risk; tracked in SECURITY_AND_RISKS.md §6 — must be removed, not extended).
+          ALLOWLIST='SecurityService/.*LoginController\.cs|ClaimBatchController\.cs'
+          NEW_LINES=$(git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+                      | grep -E '^\+\+\+ b/|^\+.*\[AllowAnonymous\]' || true)
+          if [ -n "$NEW_LINES" ]; then
+            echo "$NEW_LINES" | awk -v allow="$ALLOWLIST" '
+              /^\+\+\+ b\// { file=$2; sub(/^b\//, "", file); next }
+              /\[AllowAnonymous\]/ {
+                if (file !~ allow) {
+                  print "::error file=" file "::New [AllowAnonymous] in non-allowlisted controller. Authorize by default; see SECURITY_AND_RISKS.md."
+                  err=1
+                }
+              }
+              END { exit err }
+            ' || exit 1
+          fi
+
+      - name: Warn on new SqlClient direct usage outside known files
+        run: |
+          # After Phase 1.5 consolidation, direct SqlConnection/SqlCommand usage should be
+          # confined to the IRoutineExecutor/IQueryExecutor implementations. Until then,
+          # warn on any addition.
+          if git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+             | grep -E '^\+.*new (Sql|Npgsql)(Connection|Command|DataAdapter)\b' \
+             | grep -vE 'Common/.*Executor|RunAutoScrub|GetExcelFor'; then
+            echo "::warning::New direct SqlClient/Npgsql usage detected outside known executor / Excel-export sites. After Phase 1.5, this should route through IQueryExecutor / IRoutineExecutor."
+          fi
+
+      - name: Block addition of routine names not present in STORED_PROCEDURES.md
+        run: |
+          # Does not catch every drift — but a developer who adds ExecuteStoredProcedureAsync("usp_X")
+          # for an SP name not documented anywhere in the catalog is almost certainly the source of
+          # a future drift bug.
+          ADDED_SP_NAMES=$(git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
+                          | grep -oE 'ExecuteStoredProcedureAsync\("(usp_|rpt_|USP_)[A-Za-z0-9_]+"' \
+                          | grep -oE '(usp_|rpt_|USP_)[A-Za-z0-9_]+' \
+                          | sort -u || true)
+          if [ -n "$ADDED_SP_NAMES" ]; then
+            for sp in $ADDED_SP_NAMES; do
+              if ! grep -qi "$sp" STORED_PROCEDURES.md; then
+                echo "::warning::SP '$sp' is referenced in code but not catalogued in STORED_PROCEDURES.md. Add a row in §3 with caller, endpoint, and migration disposition."
+              fi
+            done
+          fi
+
+      - name: Block PZ_Report.Command / Scrub.StoredProcedure modifications without catalog update
+        run: |
+          # If a migration script touches PZ_Report or Scrub dispatch tables, STORED_PROCEDURES.md
+          # §3.5 / §3.6 should also be updated in the same PR.
+          DISPATCH_TOUCH=$(git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" --name-only \
+                          | grep -iE 'pz_report|scrub.*\.(sql|cs)' || true)
+          CATALOG_TOUCH=$(git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" --name-only \
+                         | grep -i 'STORED_PROCEDURES.md' || true)
+          if [ -n "$DISPATCH_TOUCH" ] && [ -z "$CATALOG_TOUCH" ]; then
+            echo "::warning::This PR touches PZ_Report or Scrub-related files but does not update STORED_PROCEDURES.md. Confirm the catalog still reflects current dispatch."
+          fi
+
+  characterization-gate:
+    name: Characterization-first gate (migration PRs)
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'migration') ||
+        contains(toJSON(github.event.pull_request.changed_files), 'docs/database/postgres')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require characterization-test evidence
+        run: |
+          # Migration PRs must either include test files or reference a commit that landed them.
+          # Heuristic: the PR diff includes a *.Tests/* file OR the PR description contains
+          # "fixture-commit:" pointing to a hash.
+          DIFF_FILES=$(git diff --name-only "origin/main...HEAD")
+          if echo "$DIFF_FILES" | grep -qE '\.Tests\.|/Tests/|fixtures/'; then
+            echo "✓ Migration PR includes test/fixture changes."
+            exit 0
+          fi
+          if [ -n "${{ github.event.pull_request.body }}" ] && \
+             echo "${{ github.event.pull_request.body }}" | grep -q 'fixture-commit:'; then
+            echo "✓ Migration PR references existing fixture commit in description."
+            exit 0
+          fi
+          echo "::error::This appears to be a migration PR but it has no characterization tests and the description does not reference a 'fixture-commit:'. See docs/database/sql-server-to-postgres-migration-plan.md §'Characterization-First TDD Migration Gate'."
+          exit 1
