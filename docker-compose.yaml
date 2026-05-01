@@ -61,9 +61,18 @@ services:
         SERVICE_PROJECT: HostService/HostService.Api/HostService.Api.csproj
         SERVICE_DLL: HostService.Api.dll
     container_name: practizing-host
+    # Bind host port 8090 -> container 8080. The control-plane Traefik
+    # routes billingapi.dsigworkflow.com to http://<this-host-ip>:8090.
+    # Only the `host` aggregator gets a host port; the other 7 services
+    # stay internal-only (their controllers are served via host anyway,
+    # and they don't have JWT auth wired in their own Startup.cs, so
+    # exposing them would be unauthenticated).
+    ports:
+      - "8090:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      ApplicationUrl: http://+:8080
       SiteLocale: ${SITE_LOCALE:-en-GB}
       ValidIssuer: ${JWT_ISSUER:-http://PractiZing.com}
       ValidAudience: ${JWT_AUDIENCE:-PRACTICE_INSIGHT}
