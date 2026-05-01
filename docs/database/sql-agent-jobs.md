@@ -50,7 +50,13 @@ ORDER BY j.name, s.step_id;
 
 Required permissions on `msdb`: `SQLAgentReaderRole` minimum, `SQLAgentOperatorRole` to read history. If the DBA cannot grant these to the migration team, the DBA captures and exports the result; the team reviews the export.
 
-Save the raw export to `postgres/validation/sql-agent-export-YYYYMMDD.csv`. Use it to populate the table below.
+**Storage policy (do NOT commit raw exports to git).** SQL Agent job step `command` columns frequently contain credentials, partner endpoint URLs, file paths, and other operational secrets. Raw exports must be kept outside the repo:
+
+- Save raw export to a developer-only location (e.g. `c:/tmp/sql-agent-export-YYYYMMDD.csv` on Windows, `~/sql-agent-export-YYYYMMDD.csv` elsewhere). NEVER `postgres/validation/`.
+- The redacted version that lands in the worksheet table below has all secrets stripped: passwords replaced with `<REDACTED-PASSWORD>`, partner-API keys with `<REDACTED-KEY>`, file paths in user home directories with `~/` placeholders.
+- Two-person review: the DBA who exports, plus a second engineer who confirms the redaction before the worksheet update lands.
+
+Use the redacted export to populate the table below. The unredacted file lives only on the DBA's laptop and is deleted once the worksheet is populated.
 
 ## Inventory worksheet (one row per job-step)
 
@@ -106,7 +112,8 @@ If the actual capture reveals categories not on this list, that is itself a find
 1. Do not edit the worksheet rows without a corresponding entry in [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md).
 2. Do not disable a SQL Agent job until its row reads `cutover` AND the cutover runbook has been executed for the relevant tenant.
 3. If a job is "currently failing" (last run ≠ success), file a bug BEFORE classifying — the migration cannot inherit broken jobs without explicit acknowledgment.
-4. SQL Agent jobs that themselves call SPs marked `Drop` in [postgres-sp-conversion.md](./postgres-sp-conversion.md) are by transitivity also `drop`. The job inventory and SP worksheet must agree.
+4. **Job-to-SP dependency direction (CRITICAL):** if a SQL Agent job calls an SP, that SP **cannot be marked `Drop` or actually dropped** until the job is migrated to its replacement (or the job itself is retired with sign-off). The dependency goes job → SP, not the other way around. Earlier wording suggested transitive drop; that was backwards and would have produced runtime breakage. Drop the job first (or migrate it), then the SP.
+5. The job inventory and SP worksheet must agree on shared rows. The `safety-reviewer` agent's checklist item #14 enforces this: any PR that retires or drops an SP must show that every SQL Agent job calling it has either already been migrated or is being migrated in the same PR.
 
 ## Cross-references
 

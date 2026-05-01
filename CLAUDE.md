@@ -16,11 +16,21 @@ The Angular frontend is a sibling repo: `Practizing-ui-TALBOT_CLINIC` at `c:\Use
 
 The full risk list is in [docs/architecture/SECURITY_AND_RISKS.md](docs/architecture/SECURITY_AND_RISKS.md).
 
-## VibeCoding Framework — the entry point
+## Reading order (start here)
 
-This repo ships a framework for safe AI-assisted development. **Use the entries in [VIBECODING.md](VIBECODING.md) before opening unfamiliar code.**
+The repo has multiple orientation files. To avoid a who-reads-whom-first loop, use this order. Other orientation files reference back here for the canonical sequence.
 
-Quick map:
+1. **This file (`CLAUDE.md`)** — Claude-specific orientation (this section). Stop here if you're a different agent and read [`AGENTS.md`](AGENTS.md) first.
+2. [`VIBECODING.md`](VIBECODING.md) — the framework index: subagents, skills, slash commands, migration-safe rules.
+3. [`docs/architecture/SECURITY_AND_RISKS.md`](docs/architecture/SECURITY_AND_RISKS.md) — the do-not-break list and the merge checklist.
+4. [`STORED_PROCEDURES.md`](STORED_PROCEDURES.md) — every active SP, its caller, and known-broken references.
+5. For migration work: [`docs/database/sql-server-to-postgres-migration-plan.md`](docs/database/sql-server-to-postgres-migration-plan.md) — read the **Characterization-First TDD Migration Gate** section first.
+
+Other orientation files in the repo and what they're for:
+- [`AGENTS.md`](AGENTS.md) (root) — the same orientation, in tool-agnostic form. Codex / Cursor / Gemini start there. Claude can ignore it; this file is the equivalent.
+- [`docs/architecture/SYSTEM_OVERVIEW.md`](docs/architecture/SYSTEM_OVERVIEW.md) — read after step 2 if you need a five-perspective architectural overview before touching code.
+
+Quick map (what's where):
 - **Architecture docs** → [docs/architecture/](docs/architecture/) — start at [SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md)
 - **How to add things** → [docs/conventions/RECIPES.md](docs/conventions/RECIPES.md)
 - **Subagents** → [.claude/agents/](.claude/agents/) — `feature-tracer`, `sp-impact-analyzer`, `safety-reviewer`, `db-introspector`

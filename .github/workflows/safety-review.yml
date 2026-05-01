@@ -96,21 +96,29 @@ jobs:
           # Allowlist of files where [AllowAnonymous] is intentional (login, public health checks, etc.)
           # Currently: SecurityService Login + ClaimBatchController.Scrub (the latter is a known
           # P0 risk; tracked in SECURITY_AND_RISKS.md §6 — must be removed, not extended).
-          ALLOWLIST='SecurityService/.*LoginController\.cs|ClaimBatchController\.cs'
-          NEW_LINES=$(git diff "${{ steps.changes.outputs.base }}" "${{ steps.changes.outputs.head }}" -- '*.cs' \
-                      | grep -E '^\+\+\+ b/|^\+.*\[AllowAnonymous\]' || true)
-          if [ -n "$NEW_LINES" ]; then
-            echo "$NEW_LINES" | awk -v allow="$ALLOWLIST" '
-              /^\+\+\+ b\// { file=$2; sub(/^b\//, "", file); next }
-              /\[AllowAnonymous\]/ {
-                if (file !~ allow) {
-                  print "::error file=" file "::New [AllowAnonymous] in non-allowlisted controller. Authorize by default; see SECURITY_AND_RISKS.md."
-                  err=1
-                }
-              }
-              END { exit err }
-            ' || exit 1
-          fi
+          # Implementation note: earlier versions used awk with backslash-escaped dots in the regex,
+          # which awk treats as literal `\.` (no metacharacter semantics) and emitted a "warning:
+          # escape sequence" message. We use grep -E here because POSIX ERE handles the dot escape
+          # correctly without warnings.
+          BASE="${{ steps.changes.outputs.base }}"
+          HEAD="${{ steps.changes.outputs.head }}"
+          ERR=0
+          # Iterate per file so we can apply the allowlist file-by-file rather than via awk state.
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- '*.cs' || true)
+          for f in $CHANGED; do
+            # Skip files in the allowlist
+            if echo "$f" | grep -qE 'SecurityService/.*LoginController\.cs|ClaimBatchController\.cs'; then
+              continue
+            fi
+            # Look for an added `[AllowAnonymous]` line in this file
+            if git diff "$BASE" "$HEAD" -- "$f" \
+               | grep -E '^\+[^+]' \
+               | grep -qE '\[AllowAnonymous\]'; then
+              echo "::error file=$f::New [AllowAnonymous] in non-allowlisted controller. Authorize by default; see SECURITY_AND_RISKS.md §6."
+              ERR=1
+            fi
+          done
+          exit $ERR
 
       - name: Warn on new SqlClient direct usage outside known files
         run: |
@@ -155,27 +163,57 @@ jobs:
   characterization-gate:
     name: Characterization-first gate (migration PRs)
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'migration') ||
-        contains(toJSON(github.event.pull_request.changed_files), 'docs/database/postgres')
+    # Only run on pull_request events. push and workflow_dispatch don't have PR
+    # context (labels, body, changed_files), so the gate cannot evaluate them
+    # meaningfully. Direct pushes to main that are migration changes still
+    # need characterization evidence — that's enforced in code review, not CI.
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Detect migration PR
+        id: detect
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          # A PR is a "migration PR" if any of these is true:
+          #   1. It carries the 'migration' label.
+          #   2. It modifies any file under docs/database/postgres or postgres-*.
+          #   3. It modifies an IRoutineExecutor / IDatabaseDialect file.
+          #   4. It removes a usp_/rpt_ name from a .cs file (SP retirement).
+          IS_MIGRATION=0
+          if echo "$PR_LABELS" | grep -q '"migration"'; then IS_MIGRATION=1; fi
+          DIFF_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          if echo "$DIFF_FILES" | grep -qE 'docs/database/postgres|IRoutineExecutor|IDatabaseDialect'; then
+            IS_MIGRATION=1
+          fi
+          if git diff "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" -- '*.cs' \
+             | grep -E '^-' | grep -qE '"(usp_|rpt_|USP_)[A-Za-z0-9_]+"'; then
+            IS_MIGRATION=1
+          fi
+          echo "is_migration=$IS_MIGRATION" >> "$GITHUB_OUTPUT"
+          echo "Detected migration PR: $IS_MIGRATION"
+
       - name: Require characterization-test evidence
+        if: steps.detect.outputs.is_migration == '1'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           # Migration PRs must either include test files or reference a commit that landed them.
-          # Heuristic: the PR diff includes a *.Tests/* file OR the PR description contains
-          # "fixture-commit:" pointing to a hash.
-          DIFF_FILES=$(git diff --name-only "origin/main...HEAD")
+          DIFF_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
           if echo "$DIFF_FILES" | grep -qE '\.Tests\.|/Tests/|fixtures/'; then
             echo "✓ Migration PR includes test/fixture changes."
             exit 0
           fi
-          if [ -n "${{ github.event.pull_request.body }}" ] && \
-             echo "${{ github.event.pull_request.body }}" | grep -q 'fixture-commit:'; then
+          if [ -n "$PR_BODY" ] && echo "$PR_BODY" | grep -q 'fixture-commit:'; then
             echo "✓ Migration PR references existing fixture commit in description."
             exit 0
           fi
-          echo "::error::This appears to be a migration PR but it has no characterization tests and the description does not reference a 'fixture-commit:'. See docs/database/sql-server-to-postgres-migration-plan.md §'Characterization-First TDD Migration Gate'."
+          echo "::error::This is a migration PR (touches postgres/ or IRoutineExecutor/IDatabaseDialect or removes an SP name) but it has no characterization tests and the description does not reference a 'fixture-commit:<hash>' pointing to an existing fixture. See docs/database/sql-server-to-postgres-migration-plan.md §'Characterization-First TDD Migration Gate'."
           exit 1
+
+      - name: Non-migration PR — gate not applicable
+        if: steps.detect.outputs.is_migration != '1'
+        run: echo "Not a migration PR; characterization-first gate skipped."

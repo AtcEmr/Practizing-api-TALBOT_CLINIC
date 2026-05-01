@@ -44,6 +44,10 @@ You do not make edits. You do not push commits. You produce a report that the hu
 | 9 | `pi-lib` rebuilt if Base classes touched | UI repo | Comment in PR / commit notes the rebuild, or the developer ran `ng build pi-lib` after edits |
 | 10 | If two parallel implementations exist (`payment/` vs `old_payment_screen/`), the live one was edited | UI repo | Diff shows changes to the live file, not the dead duplicate |
 | 11 | **Characterization-first** (migration PRs only): if the change touches `docs/database/postgres-*`, an `IRoutineExecutor`/`IDatabaseDialect` boundary, an SP retirement, or PG provider code, the PR includes captured-against-SQL-Server tests OR references the commit that already landed them | any | The same fixture must run unchanged against PG. A migration PR with new tests but no SQL Server baseline capture is a **FAIL**. See [migration plan §"Characterization-First TDD Migration Gate"](../../docs/database/sql-server-to-postgres-migration-plan.md). |
+| 12 | **SP retirement evidence**: if the PR moves any row in `postgres-sp-conversion.md` past `pending Phase 0` (e.g. to `replacement implemented`, `dual-run validated`, `cutover`, `dropped`), the same PR contains the required evidence per the worksheet's V3.2 Evidence Columns rule | `docs/database/postgres-sp-conversion.md` | Status `replacement implemented` requires a fixture-commit hash; `dual-run validated` requires a validation-run path/URL; `cutover` requires owner approval; `dropped` requires a cutover month-end date. Missing any of these is a **FAIL**. |
+| 13 | **Migration decision logged**: if the PR is a Phase 0 decision closure, an SP retirement, a schema deviation from `draft/`, or a cutover-day action, an append-only row exists in `MIGRATION_DECISIONS.md` for it | `docs/database/MIGRATION_DECISIONS.md` | Each row needs date, decision, owner (one named human), approver, and evidence (commit hash or URL). Compliance audit will ask 18 months later. |
+| 14 | **SQL Agent evidence cross-check**: if the PR retires or drops any SP, [`sql-agent-jobs.md`](../../docs/database/sql-agent-jobs.md) has been consulted and any job that calls the SP has either been migrated already or is being migrated in the same PR (NOT silently broken) | `docs/database/sql-agent-jobs.md` | A job calling a dropped SP is a runtime breakage. Dropping an SP that a SQL Agent job depends on without migrating the job is a **FAIL**. The dependency direction matters: jobs gate SP drops, not the other way around. |
+| 15 | **Local credential hygiene**: the PR does not add or modify lines in `.claude/settings.json` that contain live passwords, mutating SQL allow-rules against production, SSH commands with embedded credentials, or `echo 'pwd' \| sudo -S` patterns | `.claude/settings.json` (gitignored, but policy applies anyway) | This file is gitignored, but agents that act on a local repo will read whatever is in the developer's local copy. A leaked or pushed file with live credentials is the worst-case. **FAIL** if any new entry violates the policy in the file's `_comment_security_policy`. |
 
 ## Output shape
 
@@ -64,6 +68,11 @@ Detail:
   9. pi-lib rebuild noted       : PASS / FAIL / N/A — <evidence>
  10. Live vs dead duplicates    : PASS / FAIL / N/A — <evidence>
  11. Characterization-first     : PASS / FAIL / N/A — <evidence; N/A only for non-migration PRs>
+ 12. SP retirement evidence     : PASS / FAIL / N/A — <fixture-commit / validation-run / approval / cutover-date>
+ 13. Migration decision logged  : PASS / FAIL / N/A — <row in MIGRATION_DECISIONS.md>
+ 14. SQL Agent evidence cross   : PASS / FAIL / N/A — <evidence; jobs that call dropped SPs were migrated>
+ 15. Local credential hygiene   : PASS / FAIL / N/A — <evidence; .claude/settings.json policy>
+
 
 Other observations (worth flagging but not in the checklist):
   - …

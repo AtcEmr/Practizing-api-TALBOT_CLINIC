@@ -4,13 +4,15 @@ Tool-agnostic agent instructions for the Practizing repo. Codex (and any other a
 
 ## Read these in order
 
-1. [CLAUDE.md](./CLAUDE.md) — orientation, the three "must know before editing" risks.
-2. [VIBECODING.md](./VIBECODING.md) — the framework index. Documents, agents, skills, slash commands.
-3. [docs/architecture/SECURITY_AND_RISKS.md](./docs/architecture/SECURITY_AND_RISKS.md) — the "do not break" list and the merge checklist.
-4. [STORED_PROCEDURES.md](./STORED_PROCEDURES.md) — every active stored procedure, its caller, the dispatch tables, and known-broken references. Read before touching any SP.
+This file is the **tool-agnostic** entry point. Claude Code uses [`CLAUDE.md`](./CLAUDE.md) instead, which has the same content from a Claude-runner's perspective. **Do not read both top-to-bottom — pick the one that matches your runner.** This file's reading order is canonical for non-Claude agents:
+
+1. **This file (`AGENTS.md`)** — orientation + the three "must know before editing" rules below.
+2. [`VIBECODING.md`](./VIBECODING.md) — framework index: subagents, skills, slash commands, migration-safe rules.
+3. [`docs/architecture/SECURITY_AND_RISKS.md`](./docs/architecture/SECURITY_AND_RISKS.md) — the "do not break" list and the merge checklist.
+4. [`STORED_PROCEDURES.md`](./STORED_PROCEDURES.md) — every active stored procedure, its caller, the dispatch tables, and known-broken references. Read before touching any SP.
 
 For migration work, additionally:
-5. [docs/database/sql-server-to-postgres-migration-plan.md](./docs/database/sql-server-to-postgres-migration-plan.md) — read the **Characterization-First TDD Migration Gate** section (near the top) before any SQL/PG/SP/EDI work.
+5. [`docs/database/sql-server-to-postgres-migration-plan.md`](./docs/database/sql-server-to-postgres-migration-plan.md) — read the **Characterization-First TDD Migration Gate** section (near the top) before any SQL/PG/SP/EDI work.
 
 ## The three rules every agent must respect
 

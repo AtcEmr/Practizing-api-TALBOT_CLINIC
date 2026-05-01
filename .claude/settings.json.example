@@ -1,0 +1,30 @@
+{
+  "_doc": [
+    "Template for .claude/settings.json. Copy this to .claude/settings.json (which is gitignored)",
+    "and add narrowly-scoped allow rules as you go. Read .claude/settings.json's _comment_security_policy",
+    "before adding any new entry.",
+    "",
+    "Rules:",
+    "  - No hardcoded passwords. Ever. Use a placeholder and let Claude prompt at runtime, OR",
+    "    rely on environment variables that Claude can read (e.g. $PI_ATC_DB_PASSWORD).",
+    "  - No mutating SQL allow-rules against production. The db-introspector agent is read-only.",
+    "  - No SSH allow-rules with embedded passwords. Use ssh-agent.",
+    "  - When you find a useful command pattern, add it here as a template — but verify it",
+    "    contains no secrets before committing this file."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(docker network *)",
+      "Bash(tee /tmp/api-build*.log)",
+      "Bash(tee /tmp/ui-build*.log)",
+
+      "// Read-only DB introspection (interactive password prompt).",
+      "// Replace <DB_PASSWORD> with an actual prompt or env-var substitution at use-time.",
+      "Bash(MSYS_NO_PATHCONV=1 docker run --rm mcr.microsoft.com/mssql-tools /opt/mssql-tools/bin/sqlcmd -S 10.3.104.52 -U sa -d PI_ATC_CLINIC -Q \"SELECT name FROM sys.procedures ORDER BY name\" -h -1 -W)",
+      "Bash(MSYS_NO_PATHCONV=1 docker run --rm mcr.microsoft.com/mssql-tools /opt/mssql-tools/bin/sqlcmd -S 10.3.104.52 -U sa -d PI_ATC_CLINIC -Q \"SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('<TABLE>')\" -W)",
+
+      "// SSH to Coolify host using ssh-agent (no embedded password). Uncomment when needed.",
+      "// Bash(ssh admin@10.3.104.49 'docker ps --format \"table {{.Names}}\\\\t{{.Status}}\"')"
+    ]
+  }
+}

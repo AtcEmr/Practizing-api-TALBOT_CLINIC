@@ -1533,11 +1533,9 @@ PostgreSQL index opportunities:
 | Alert thresholds | Money diff > $0.01 on any table → page on-call immediately. Row-count diff > 0.1% → daily-digest alert. Hash diff on any modified row → daily-digest with row id. | $0.01 is the financial gate; 0.1% absorbs trigger-noise. |
 | Triage SLA | P0 (money diff) → 1 hour; P1 (row hash) → 24 hours; P2 (count drift) → next business day. | Realistic for a 4-5 person team. |
 | Owner | One named engineer + the migration lead as backup. | Without an owner, diffs accumulate. |
-| Dashboard | Grafana panel showing diff counts by category over time + a "current open diffs" list. | Visibility makes triage routine instead of heroic. |
+| Dashboard | Observability dashboard (technology TBD — Grafana, Datadog, Coolify-native, or a simple HTML report). The choice depends on the monitoring stack picked in Phase 0 (see [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md) D17). What matters is: diff counts by category over time + a "current open diffs" list. | Visibility makes triage routine instead of heroic. |
 
 The job lives in a new `PractiZing.Migration.DiffValidator` console app, deployed alongside the API services in Coolify. Its runbook is `postgres/runbooks/diff-validation-runbook.md`.
-
-**Trigger-noise warning (read first):** the 221 audit/cascading triggers (see "Trigger Migration Strategy" earlier) will produce diffs in audit timestamps and possibly in cascaded state columns even when the underlying business data is correct. Phase 9 validation logic must classify each diff:
 
 **Trigger-noise warning (read first):** the 221 audit/cascading triggers (see "Trigger Migration Strategy" earlier) will produce diffs in audit timestamps and possibly in cascaded state columns even when the underlying business data is correct. Phase 9 validation logic must classify each diff:
 
@@ -1591,7 +1589,7 @@ Golden-master comparisons:
 
 | Decision | Required answer (commit one in writing in [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md)) |
 |---|---|
-| **Cutover model** | (a) Hard cutover with maintenance window — write-freeze on SQL Server, sync delta, flip routing. Acceptable downtime: 2-6 hours during off-hours. **OR** (b) CDC-based zero-downtime — logical replication keeps PG synced; flip per-tenant. Acceptable downtime: zero, but operational complexity is much higher. **Default recommendation: hard cutover for the pilot tenant; CDC for the broader rollout if the pilot exposes acceptance for downtime.** |
+| **Cutover model** | (a) Hard cutover with maintenance window — write-freeze on SQL Server, sync delta, flip routing. Acceptable downtime: 2-6 hours during off-hours. **OR** (b) CDC-based near-zero-downtime — a SQL Server CDC source-side mechanism feeds a chosen replication tool (Debezium with the SQL Server connector, AWS DMS, Azure DMS, Striim, or Qlik Replicate) that emits to PG. PostgreSQL **logical replication is NOT the source-side mechanism**; it is a PG-to-PG concept and does not read from SQL Server. If model (b) is chosen, the team must select the SQL Server CDC tool, prove it handles deletes (CDC must capture deletes via change tables, not just row state), identity-column propagation, LOB/blob columns, end-to-end ordering, retry on transient failures, and reconciliation when CDC lag exceeds threshold. Acceptable downtime: typically < 1 minute, but operational complexity is much higher. **Default recommendation: hard cutover for the pilot tenant; only consider CDC for the broader rollout if the pilot exposes intolerance for downtime AND the CDC tool has been proven against the full schema.** |
 | **Source of truth during pilot** | SQL Server is the source of truth for the **pilot tenant** until the dual-run validation gate passes for ≥ N consecutive days. PG-only writes start only after that gate. Pick N (recommend 14 days, including ≥1 month-end close). |
 | **Reverse-sync policy** | If the pilot tenant has any PG-only writes, those writes are **NOT** propagated back to SQL Server. Rolling back means accepting data loss for the pilot tenant from cutover-time onward. Decide before the pilot: is the practice OK with this? Document the consent. |
 | **Reconciliation for in-flight transactions** | Define what "in-flight" means at cutover-instant: claims submitted but not yet acknowledged, payments posted but not yet committed, ERAs in the SFTP retrieval window, statements queued for delivery. For each, name the post-cutover reconciliation script and its owner. |
@@ -2116,7 +2114,7 @@ These are decisions or unknowns the plan cannot resolve unilaterally. Each shoul
 5. **Approve EdiFabric license/runtime upgrade for the final .NET target?** Cost question. (Owner: vendor management. Deadline: end of Phase 0.)
 6. **Approve hybrid migration (Option C) over full retirement (Option B)?** Codex recommends hybrid; this v2 review concurs. (Owner: architecture lead. Deadline: end of Phase 0.)
 7. **Approve pilot tenant selection?** Use the rubric in §"Pilot tenant selection rubric". (Owner: product + ops. Deadline: before Phase 9.)
-8. **Approve cutover model: hard cutover with maintenance window, or CDC-based zero-downtime?** Affects Phase 10 design. (Owner: architecture + ops. Deadline: before Phase 8.)
+8. **Approve cutover model: hard cutover with maintenance window, or CDC-based zero-downtime?** Affects Phase 10 design. (Owner: architecture + ops. Deadline: **end of Phase 0** — same row as D10 in [MIGRATION_DECISIONS.md](./MIGRATION_DECISIONS.md). Earlier drafts said "before Phase 8" but the cutover-architecture choice gates the boundary work in Phase 2 and the data-migration approach in Phase 4; deferring to Phase 8 was the wrong sequencing.)
 
 ### Decisions needed from compliance / legal
 1. **HIPAA audit retention requirements** for the 221 triggers. Which audit rows must survive the migration as bit-perfect copies vs. acceptable to reproduce in a new schema? (Owner: compliance. Deadline: before Phase 6e.)
@@ -2135,7 +2133,7 @@ These are decisions or unknowns the plan cannot resolve unilaterally. Each shoul
 3. **Does the ServiceStack license bundle include OrmLite PostgreSQL provider?** (Owner: backend lead. Deadline: end of Phase 0.)
 4. **Will the team accept a brief read-only window during cutover** (e.g., 30 minutes) or must it be zero-downtime? Decides whether logical replication is needed. (Owner: ops. Deadline: before Phase 8.)
 5. **What is the test data plan?** The current dev DB has live PHI. We cannot use it for unit/integration testing. Need a de-identified synthetic dataset that exercises the major workflows. (Owner: QA lead. Deadline: end of Phase 1.)
-6. **Are there SQL Agent jobs we don't know about?** Per the plan, "scheduled work runs as SQL Agent jobs on the DB host." Inventory required. (Owner: DBA. Deadline: end of Phase 5.)
+6. **Are there SQL Agent jobs we don't know about?** Per the plan, "scheduled work runs as SQL Agent jobs on the DB host." Inventory required. (Owner: DBA. Deadline: **end of Phase 1** — promoted from Phase 5 in V3.2; see §"SQL Agent job inventory" earlier in this plan.)
 7. **What is the rollback authority chain?** Who can call "abort cutover" at hour 6 of a 12-hour window, and what's the criteria? (Owner: project sponsor. Deadline: before Phase 10.)
 
 ### Items the original plan flagged that this review confirms

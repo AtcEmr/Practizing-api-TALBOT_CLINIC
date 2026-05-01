@@ -53,7 +53,59 @@ docs/database/postgres/
 
 ## What lives where
 
-- **`draft/`** — generated output (pgloader, scripts). Never hand-edit; regenerate if the source schema changes.
+- **`draft/`** — generated output (pgloader, scripts). Never hand-edit; regenerate if the source schema changes. **Every `draft/` regeneration MUST include a `manifest.json`** (see required fields below) so a future review can confirm what was generated against what.
+
+#### `draft/manifest.json` required fields
+
+Every pgloader run that produces output in `draft/` is paired with a `manifest.json` capturing the inputs and tool versions that produced it. Without the manifest, "we ran pgloader" is not auditable.
+
+```jsonc
+{
+  "captured_at": "2026-04-30T14:32:01Z",          // UTC ISO 8601
+  "captured_by": "alice@example.com",
+  "source": {
+    "host": "10.3.104.52",
+    "database": "PI_ATC_CLINIC",
+    "sql_server_version": "Microsoft SQL Server 2019 (RTM-CU18) ...",
+    "schema_hash": "sha256:abc123...",            // hash of `sys.objects` + `sys.columns` snapshot
+    "object_counts": {
+      "tables":    275,
+      "columns":   4775,
+      "indexes":   259,
+      "fks":       140,
+      "views":     16,
+      "procedures":138,
+      "functions": 23,
+      "triggers":  221
+    }
+  },
+  "row_count_snapshot": {
+    "Charge":   1234567,
+    "Payment":   234567,
+    "Patient":    45678
+    // … all tables; this is the snapshot to reconcile against post-load
+  },
+  "pgloader": {
+    "version": "3.6.7",
+    "config_file_hash": "sha256:def456...",
+    "command": "pgloader --with \"data only\" mssql.cfg pg.cfg"
+  },
+  "excluded_objects": [
+    { "name": "dbo.Provieder_temp", "reason": "obvious typo / dead table" }
+  ],
+  "errors": {
+    "count": 0,
+    "log_file": "pgloader-run.log"
+  },
+  "generated_ddl": {
+    "file": "01_create_schemas.sql",
+    "hash": "sha256:ghi789..."
+  },
+  "previous_manifest_hash": "sha256:..."           // links to the prior run; null on first run
+}
+```
+
+The manifest is committed to `draft/manifest-YYYYMMDD-HHMMSS.json` (one per run, keep all). When `curated/` differs from `draft/`, the deviations log references the specific manifest hash that produced the draft.
 - **`curated/`** — what production will actually run. Hand-edited as needed; every deviation from `draft/` is logged in `deviations.md` so the next pgloader run can be diffed against current intent.
 - **`functions/`** — only SPs that the migration plan's Phase 6 classification kept (reports too complex to retire, performance-critical aggregates). The README in `functions/` lists every original SP and where it ended up: ported, retired into application code, or dropped.
 - **`triggers/`** — at most one generic audit trigger function. Per-table cascading-state triggers are **not** ported here — those move to application services.

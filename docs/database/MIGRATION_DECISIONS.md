@@ -29,6 +29,14 @@ The auditable record of every migration decision: what was decided, when, by who
 | D12 | — | **Background-job framework** (Hangfire / Quartz / cron / IHostedService / external) | pending | backend lead | architecture lead | — |
 | D13 | — | EdiFabric license + .NET 10 compatibility confirmed (or replacement plan) | pending | vendor management | CTO | — |
 | D14 | — | ServiceStack license bundle includes OrmLite PostgreSQL provider | pending | backend lead | vendor management | — |
+| D15 | — | **PostgreSQL major version** (14 / 15 / 16 / 17 — recommend 16 LTS) | pending | DBA | architecture lead | — |
+| D16 | — | **PG connection pooling** (PgBouncer / Npgsql multiplexing / managed-service-built-in / none). Affects connection-limit math during dual-run. | pending | DBA | architecture lead | — |
+| D17 | — | **Monitoring / observability stack** (Grafana / Datadog / Coolify-native / CloudWatch / Azure Monitor). Required by Phase 9 diff-validation dashboard. | pending | ops | CTO | — |
+| D18 | — | **Read replicas** (yes — with topology / no). Affects reporting load + dual-run diff job. | pending | DBA | architecture lead | — |
+| D19 | — | **Extension policy** (`pgcrypto` for `gen_random_uuid()`; `citext` per D4; `pg_stat_statements` for performance analysis; others). Whitelist before Phase 3 schema work. | pending | DBA | architecture lead | — |
+| D20 | — | **Logical replication / CDC tool for SQL Server → PG** (Debezium with SQL Server connector / AWS DMS / Azure DMS / Striim / Qlik Replicate / N/A if hard-cutover). Required only if D10 = CDC. | pending | architecture + ops | CTO | — |
+| D21 | — | **PITR (point-in-time recovery) window** for production PG (minimum 14 days; recommend 35). | pending | ops + compliance | CTO + Compliance officer | — |
+| D22 | — | **Audit logging stack on PG** (`pgaudit` extension / application-side / hybrid). Required by D7 (audit-history strategy). | pending | DBA + compliance | CTO | — |
 
 ## Compliance Decisions
 
