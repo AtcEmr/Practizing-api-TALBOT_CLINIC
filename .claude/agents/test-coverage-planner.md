@@ -12,14 +12,19 @@ Given a change (a diff, a feature description, or a stored-procedure name), prod
 
 ## Why this exists
 
-The codebase has minimal test coverage today (one mostly-empty test project for the API; ~34 stub `.spec.ts` for the UI). Every non-trivial change ships into production without a regression net. The test-coverage-planner forces the conversation about what *should* be tested, so each PR adds at least one regression-preventing test.
+The codebase has minimal test coverage today and what exists is brittle:
+- Two API test projects: `Common/PractiZing.UnitTest.Common/` and `DenialManagementService/PractiZing.UnitTest.DenialService/`. Both have hardcoded developer-machine SQL credentials and `DependencyResolverTest.DBConnection()` returns `null`. Treat them as legacy — do not copy as a template.
+- ~34 stub `.spec.ts` files in the UI, most assert nothing. Angular 7.1, so `TestBed.inject(...)` does not exist (use `TestBed.get(...)`).
+
+Every non-trivial change ships into production without a regression net. The test-coverage-planner forces the conversation about what *should* be tested, so each PR adds at least one regression-preventing test that does not depend on the legacy fixtures.
 
 The team's stated coverage goal is 80%. We are far below that. This planner is one of the few mechanisms that can ratchet coverage up over time without a dedicated "add tests" sprint.
 
 ## Inputs you can rely on
 
-- API repo: working dir. `PractiZing.UnitTest.Common` is the existing test project. Mirror its patterns.
-- UI repo: `c:\Users\MadhukarNarahari\Documents\GitHub\Practizing-ui-TALBOT_CLINIC`. ~34 `.spec.ts` files, mostly stubs.
+- API repo: working dir.
+  - **Existing test projects (LEGACY — do not extend as-is):** `Common/PractiZing.UnitTest.Common/` and `DenialManagementService/PractiZing.UnitTest.DenialService/`. The shared `DependencyResolverTest` fixture has hardcoded local creds, an expired ServiceStack license, and returns `null` for the connection. New tests should establish their own test base (see [write-tests skill](../skills/write-tests/SKILL.md) Step 0).
+- UI repo: `c:\Users\MadhukarNarahari\Documents\GitHub\Practizing-ui-TALBOT_CLINIC`. Angular 7.1; ~34 `.spec.ts` files, mostly stubs. Use `TestBed.get(...)`, not `TestBed.inject(...)`.
 - Architecture docs: `docs/architecture/SYSTEM_OVERVIEW.md` and friends. Use them to reason about which layer a test should live in.
 - SP catalog: `STORED_PROCEDURES.md`. If the change touches an SP, consult it for callers.
 - Risk list: `docs/architecture/SECURITY_AND_RISKS.md`. Each risk class has a corresponding test pattern (e.g. injection, multi-tenant filtering, audit timestamps).
@@ -39,7 +44,7 @@ The team's stated coverage goal is 80%. We are far below that. This planner is o
 
 4. **Apply the risk-driven test patterns.** From SECURITY_AND_RISKS.md, every change should be checked against:
    - **Multi-tenant** — does the repository filter by `LoggedUser.PracticeId`? Add a test that proves a different practice's data is not returned.
-   - **Permission** — since the permission filter is disabled, any authenticated test user can hit the endpoint. Document this as a known gap; do NOT skip writing the test that *would* enforce permissions if they were on.
+   - **Permission** — the permission filter is currently disabled, so a "403 for wrong role" test will fail today. Two acceptable options: (a) include re-enabling the role check in the same PR and write the 403 test as a normal P0; (b) plan the permission test as `[Skip("known-gap: permission filter disabled, see SECURITY_AND_RISKS §2")]` so coverage tools see it pending and the gap is auditable. Do NOT write the test as a normal expectation that fails immediately — that erodes trust in the test suite.
    - **SQL injection** — if `ExecuteStoredProcedureAsync` is called with any input that could be reachable from a request, add a test that passes a string with quotes and verifies it's rejected or escaped.
    - **DateTime audit** — if the change writes audit columns, add a test that confirms `DateTime.UtcNow` is used (or document the deviation).
    - **PracticeId default** — a test where the JWT has no PracticeId claim must NOT silently write to PracticeId=1.

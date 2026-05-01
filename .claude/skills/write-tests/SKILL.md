@@ -20,11 +20,22 @@ description: Writes tests for changed code in the Practizing API or UI. Use when
 
 ## Step 0: Sanity-check existing infrastructure
 
-This codebase has very little test infrastructure today.
+This codebase has very little usable test infrastructure today, and what exists is **legacy and brittle — do not copy it blindly**.
 
-**API side:** `PractiZing.UnitTest.Common` exists with `TestStartUp.cs` and `DependencyResolverTest.cs`. There is no integration test harness wired up. If you need one for repository-contract or API-integration tests, propose adding the harness as part of the PR rather than skipping the test.
+**API side — two existing test projects, both legacy:**
+- `Common/PractiZing.UnitTest.Common/` — has `DependencyResolverTest.cs` and `TestStartUp.cs`. Issues: `DBConnection()` hardcodes a developer's local SQL Server credentials (`DESKTOP-PBHUBDF\SA`, `sa/sa$123`) and an expired ServiceStack license, then returns `null`. It also depends on `SqlServerOrmLiteDialectProvider`, which means tests in this project cannot run on CI or against the team DB without rewriting the fixture.
+- `DenialManagementService/PractiZing.UnitTest.DenialService/` — second test project, similar shape.
 
-**UI side:** ~34 `.spec.ts` files exist, most are generator stubs that don't assert anything. The Angular CLI's `ng test` runner works against the workspace; some of the stubs may currently fail. Before adding new tests, run `ng test --watch=false` against the relevant project to see the baseline.
+**Do not extend either project as-is.** When you add real tests:
+1. Create or augment a new `*.Tests` project alongside the production project (e.g. `ChargePaymentService/PractiZing.Tests.ChargePaymentService/`).
+2. Build a new `RepositoryTestBase` that reads the test DB connection from `appsettings.Test.json` or env var — never hardcoded.
+3. Do not import `DependencyResolverTest` from your new tests.
+
+If you must touch the legacy projects, mark them in the PR description so the team knows to plan a cleanup.
+
+**UI side — ~34 `.spec.ts` stubs, most don't assert anything.** Two practical caveats:
+- The Angular CLI runner needs `npm install` first. The repo currently has no `node_modules` checked in (and shouldn't); confirm the dev environment is set up before running `ng test --watch=false`.
+- This is **Angular 7.1**. The modern `TestBed.inject(X)` API does NOT exist here — use `TestBed.get(X)`. The component testing patterns shown later in this skill follow Angular 7 conventions; do not "modernize" them.
 
 If the harness is genuinely missing and adding it is out of scope, **say so explicitly to the user.** Do not write a test that depends on infrastructure that doesn't exist.
 
@@ -168,6 +179,7 @@ This pattern is the migration plan's Phase 4 acceptance criterion. Investing in 
 Karma + Jasmine, matching the existing `.spec.ts` style. Use `TestBed` to compile the component, assert template rendering, and use `HttpClientTestingModule` to stub HTTP.
 
 ```typescript
+// Angular 7.1 — use TestBed.get(), NOT TestBed.inject() (inject is Angular 9+).
 describe('ProviderComponent', () => {
   let comp: ProviderComponent;
   let fixture: ComponentFixture<ProviderComponent>;
@@ -181,7 +193,7 @@ describe('ProviderComponent', () => {
     }).compileComponents();
     fixture = TestBed.createComponent(ProviderComponent);
     comp = fixture.componentInstance;
-    http = TestBed.inject(HttpTestingController);
+    http = TestBed.get(HttpTestingController);          // Angular 7
   });
 
   it('loads providers on init', () => {
