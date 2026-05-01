@@ -1849,4 +1849,6 @@ This plan complements other migration-supporting docs in the repo:
 - [docs/architecture/SECURITY_AND_RISKS.md](../architecture/SECURITY_AND_RISKS.md) — known risks; the migration must not regress any of these.
 - [docs/architecture/API_ARCHITECTURE.md](../architecture/API_ARCHITECTURE.md) — current architecture; informs the boundary design in Phase 2.
 - [docs/database/PI_ATC_CLINIC_schema.md](./PI_ATC_CLINIC_schema.md) — current schema dump.
+- [docs/database/postgres-schema-conversion.md](./postgres-schema-conversion.md) — the conversion **worksheet**: per-decision and per-rule status, gated on Phase 0. Update as decisions land.
+- [docs/database/postgres/](./postgres/) — destination folder for actual PostgreSQL artifacts (DDL, functions, validation scripts). Empty by design until Phase 0 decisions close.
 - [VIBECODING.md](../../VIBECODING.md) — the framework's `sp-impact-analyzer` subagent should be used during Phase 5 to verify each SP's blast radius before deciding its disposition.

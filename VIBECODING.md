@@ -63,6 +63,8 @@ Read in order on first contact with this codebase:
 | [STORED_PROCEDURES.md](STORED_PROCEDURES.md) | Every active SP, its caller, the dispatch tables, and known-broken references. |
 | [docs/database/](docs/database/) | DB schema (maintained by Codex). |
 | [docs/database/sql-server-to-postgres-migration-plan.md](docs/database/sql-server-to-postgres-migration-plan.md) | The PostgreSQL migration plan. Read before authoring any new stored procedure. Defines "migration-safe mode." |
+| [docs/database/postgres-schema-conversion.md](docs/database/postgres-schema-conversion.md) | Conversion worksheet — per-decision and per-rule status. Update as Phase 0 closes. |
+| [docs/database/postgres/](docs/database/postgres/) | Destination folder for actual PostgreSQL DDL artifacts. Empty until Phase 0 ratifies. |
 
 ## Migration-safe mode
 
